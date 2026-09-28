@@ -1,0 +1,2049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>SRM IST Trichy - Unified Campus Operating Hub</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- FontAwesome 6 -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+  <style>
+    /* 3D Stage & Canvas */
+    .perspective-stage {
+      perspective: 1500px;
+      perspective-origin: 50% 45%;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: pan-y;
+    }
+    
+    .isometric-world {
+      transform-style: preserve-3d;
+      transition: transform 0.08s ease-out;
+      will-change: transform;
+    }
+
+    .blueprint-grid {
+      background-size: 32px 32px;
+      background-image: 
+        linear-gradient(to right, rgba(16, 185, 129, 0.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(16, 185, 129, 0.06) 1px, transparent 1px);
+    }
+
+    .building-floor-slab {
+      transform-style: preserve-3d;
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+      cursor: pointer;
+    }
+
+    .building-floor-slab:hover {
+      transform: translateZ(18px) scale(1.02);
+      box-shadow: 0 15px 35px -5px rgba(16, 185, 129, 0.4);
+    }
+
+    .room-block-3d {
+      transform-style: preserve-3d;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+      cursor: pointer;
+    }
+
+    .room-block-3d:hover {
+      transform: translateZ(28px) scale(1.04);
+      z-index: 50;
+    }
+
+    .room-wall-free {
+      background: linear-gradient(135deg, rgba(6, 78, 59, 0.8), rgba(15, 23, 42, 0.96));
+      border: 1.5px solid rgba(52, 211, 153, 0.7);
+      box-shadow: 0 14px 28px -5px rgba(16, 185, 129, 0.4);
+    }
+
+    .room-wall-occ {
+      background: linear-gradient(135deg, rgba(127, 29, 29, 0.65), rgba(15, 23, 42, 0.96));
+      border: 1.5px solid rgba(239, 68, 68, 0.5);
+      box-shadow: 0 10px 22px -5px rgba(239, 68, 68, 0.25);
+    }
+
+    @keyframes pulse-loud {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+      50% { transform: scale(1.015); box-shadow: 0 0 35px rgba(239, 68, 68, 0.8); }
+    }
+    .loud-detention {
+      animation: pulse-loud 1.5s infinite ease-in-out;
+    }
+
+    @keyframes radar-beacon {
+      0% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.4); opacity: 0.3; }
+      100% { transform: scale(1); opacity: 0.9; }
+    }
+    .radar-pulse {
+      animation: radar-beacon 2s infinite ease-in-out;
+    }
+
+    @keyframes zoom-in-slab {
+      0% { transform: scale(0.8) translateZ(-40px); opacity: 0; }
+      100% { transform: scale(1) translateZ(0); opacity: 1; }
+    }
+    .animate-zoom-in {
+      animation: zoom-in-slab 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #334155; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen py-4 sm:py-6 px-3 sm:px-6 font-sans selection:bg-blue-600 selection:text-white">
+
+  <!-- Main Container -->
+  <div class="max-w-7xl mx-auto space-y-6 pb-24">
+
+    <!-- MASTER HEADER -->
+    <header class="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 shadow-2xl backdrop-blur-xl flex flex-col lg:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-3.5 w-full lg:w-auto">
+        <div class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-emerald-500 flex items-center justify-center text-white text-xl sm:text-2xl font-black shadow-lg shadow-blue-600/30 flex-shrink-0">
+          <i class="fa-solid fa-graduation-cap"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <h1 class="text-lg sm:text-xl font-black tracking-tight text-white">SRM TRICHY CAMPUS RADAR</h1>
+            <span class="bg-blue-500/10 text-blue-400 border border-blue-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Unified Platform</span>
+          </div>
+          <p class="text-xs text-slate-400">School of EEE & Computing • Odd Semester: 29 Aug 2026 – 29 Nov 2026</p>
+        </div>
+      </div>
+
+      <!-- MAIN APP MODULE TABS -->
+      <div class="flex items-center bg-slate-950 p-1.5 rounded-2xl border border-slate-800 w-full sm:w-auto justify-center">
+        <button id="tabBtnAttendance" onclick="switchMainTab('attendance')" class="flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 bg-blue-600 text-white shadow-md">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span>Attendance Radar</span>
+        </button>
+        <button id="tabBtnLocator" onclick="switchMainTab('locator')" class="flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 text-slate-400 hover:text-white">
+          <i class="fa-solid fa-door-open"></i>
+          <span>3D Class Locator</span>
+        </button>
+      </div>
+
+      <!-- ACTION BUTTONS -->
+      <div class="flex items-center gap-2 w-full lg:w-auto justify-end flex-wrap">
+        <button onclick="openUnifiedHelpModal()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-circle-question text-emerald-400"></i>
+          <span>How It Works</span>
+        </button>
+        <button onclick="toggleODModal()" class="px-3.5 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-file-signature text-indigo-400"></i>
+          <span>OD Simulator (<span id="odCounterBadge">0</span>)</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ========================================================================= -->
+    <!-- MODULE 1: ATTENDANCE PREDICTOR (ROUND 1)                                  -->
+    <!-- ========================================================================= -->
+    <div id="moduleAttendance" class="space-y-6">
+
+      <!-- Top KPI Dashboard Cards -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center text-lg flex-shrink-0">
+            <i class="fa-solid fa-book-open"></i>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-semibold block">Total Subjects</span>
+            <span id="counterTotalSubs" class="text-lg sm:text-xl font-bold text-white leading-tight">--</span>
+          </div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center text-lg flex-shrink-0">
+            <i class="fa-solid fa-shield-halved"></i>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-semibold block">Safe (≥75%)</span>
+            <span id="counterSafe" class="text-lg sm:text-xl font-bold text-emerald-400 leading-tight">--</span>
+          </div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center text-lg flex-shrink-0">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-semibold block">Danger (<75%)</span>
+            <span id="counterDanger" class="text-lg sm:text-xl font-bold text-amber-400 leading-tight">--</span>
+          </div>
+        </div>
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-red-500/10 text-red-400 flex items-center justify-center text-lg flex-shrink-0">
+            <i class="fa-solid fa-ban"></i>
+          </div>
+          <div>
+            <span class="text-[10px] text-slate-400 uppercase font-semibold block">Detained</span>
+            <span id="counterDetained" class="text-lg sm:text-xl font-bold text-red-500 leading-tight">--</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Configuration Control Panel -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h2 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+            <i class="fa-solid fa-sliders text-blue-500"></i> Semester Planning Configuration
+          </h2>
+          <span class="text-xs text-slate-500 hidden sm:inline">Aug 29 – Nov 29, 2026</span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
+              <i class="fa-solid fa-users text-blue-400"></i> Class Section (10 Classes)
+            </label>
+            <select id="sectionSelect" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <option value="IV_ECE_B">IV Year - ECE B (Sem VII, IST 227)</option>
+              <option value="IV_ECE_A">IV Year - ECE A (Sem VII, IST 225)</option>
+              <option value="III_ECE_DS">III Year - ECE DS (Sem V, IST 519)</option>
+              <option value="III_ECE_B">III Year - ECE B (Sem V, IST 518)</option>
+              <option value="III_ECE_A">III Year - ECE A (Sem V, IST 518)</option>
+              <option value="III_BME">III Year - BME (Sem V, IST 211)</option>
+              <option value="II_ECE_DS_A">II Year - ECE DS A (Sem III, IST 416)</option>
+              <option value="II_ECE_DS_B">II Year - ECE DS B (Sem III, IST 411)</option>
+              <option value="II_BME">II Year - BME (Sem III, IST 602)</option>
+              <option value="I_ECE_A">I Year - ECE A (Sem I, IST 602)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
+              <i class="fa-regular fa-calendar-check text-blue-400"></i> Semester Start Date
+            </label>
+            <input type="date" id="semStartDate" value="2026-08-29" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
+              <i class="fa-solid fa-clock text-emerald-400"></i> Today's Date
+            </label>
+            <input type="date" id="todayDate" value="2026-09-28" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
+              <i class="fa-solid fa-flag-checkered text-purple-400"></i> Target Planning Date
+            </label>
+            <input type="date" id="targetDate" value="2026-11-29" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs font-semibold text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+          </div>
+        </div>
+      </div>
+
+      <!-- Master Detention Alert Banner -->
+      <div id="masterAlert" class="hidden bg-gradient-to-r from-red-950 via-red-900/70 to-red-950 border-2 border-red-500 rounded-3xl p-5 shadow-2xl loud-detention">
+        <div class="flex items-start gap-4">
+          <div class="w-12 h-12 rounded-2xl bg-red-600 flex items-center justify-center text-white text-2xl flex-shrink-0 shadow-lg shadow-red-600/50">
+            <i class="fa-solid fa-skull-crossbones"></i>
+          </div>
+          <div class="space-y-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-base sm:text-lg font-black tracking-wide text-white uppercase">Critical Alert: Irreversible Detention Detected!</h3>
+              <span class="bg-red-600 text-white font-bold text-[10px] px-2 py-0.5 rounded tracking-widest uppercase">Barred from Hall Ticket</span>
+            </div>
+            <p class="text-xs sm:text-sm text-red-200">
+              One or more subjects have mathematically fallen below the 75% cutoff. Even if you attend <strong>100% of all classes</strong> until 29th November 2026, you cannot reach 75%. You must urgently apply for institutional condonation or makeup classes.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Visual Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg flex flex-col justify-between">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 class="text-xs sm:text-sm font-bold uppercase text-slate-300 flex items-center gap-2">
+              <i class="fa-solid fa-chart-column text-blue-400"></i> Attendance Health Comparison
+            </h3>
+            <span class="text-[11px] text-slate-500">Current % vs 75% Cutoff vs Max Attainable</span>
+          </div>
+          <div class="relative h-64 sm:h-72 mt-3">
+            <canvas id="healthBarChart"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg flex flex-col justify-between">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+            <h3 class="text-xs sm:text-sm font-bold uppercase text-slate-300 flex items-center gap-2">
+              <i class="fa-solid fa-chart-pie text-purple-400"></i> Subject Health Share
+            </h3>
+          </div>
+          <div class="relative h-60 mt-3 flex items-center justify-center">
+            <canvas id="healthDoughnutChart"></canvas>
+          </div>
+          <p class="text-[11px] text-slate-400 text-center mt-2 italic">Real-time status across Safe, Danger, and Detained.</p>
+        </div>
+      </div>
+
+      <!-- Subject Cards Grid -->
+      <div class="space-y-3.5">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <h2 class="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+            <i class="fa-solid fa-list-check text-blue-500"></i> Subject-Wise Action Engine
+          </h2>
+          <span class="text-xs text-slate-400">Edit current percentage below to compute live safety thresholds</span>
+        </div>
+
+        <div id="subjectsContainer" class="space-y-3">
+          <!-- Dynamically injected via JavaScript -->
+        </div>
+      </div>
+
+      <!-- Active Leaves List -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <h3 class="text-xs sm:text-sm font-bold uppercase text-slate-300 flex items-center gap-2">
+            <i class="fa-solid fa-briefcase-medical text-indigo-400"></i> Active On-Duty (OD) & Medical Leave Simulator
+          </h3>
+          <button onclick="toggleODModal()" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1">
+            <i class="fa-solid fa-plus"></i> Add Leave
+          </button>
+        </div>
+        <div id="leavesList" class="space-y-2 text-xs"></div>
+      </div>
+
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- MODULE 2: FREE CLASS LOCATOR & 3D BUILDING (ROUND 2)                      -->
+    <!-- ========================================================================= -->
+    <div id="moduleLocator" class="space-y-6 hidden">
+
+      <!-- AI Room Finder Search Bar -->
+      <div class="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-925 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+        <div class="absolute -right-10 -bottom-10 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="flex items-center justify-between mb-3">
+          <label for="aiSearchInput" class="text-xs sm:text-sm font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> AI Room Finder (Natural Language Search)
+          </label>
+          <span class="text-[11px] text-slate-400 hidden sm:inline">Powered by Groq Llama-3.3 70B</span>
+        </div>
+
+        <form onsubmit="handleAISearch(event)" class="relative flex flex-col sm:flex-row gap-2">
+          <div class="relative flex-1">
+            <i class="fa-solid fa-magnifying-glass absolute left-4 top-3.5 text-slate-500 text-sm"></i>
+            <input 
+              type="text" 
+              id="aiSearchInput" 
+              placeholder="e.g. 'I need an AC room on the ground floor for me and my team for the next 2 hours'"
+              class="w-full bg-slate-950/90 border border-slate-700/80 rounded-2xl pl-11 pr-4 py-3.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium transition"
+            />
+          </div>
+          <button 
+            type="submit" 
+            id="aiSearchBtn"
+            class="px-6 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs sm:text-sm rounded-2xl shadow-lg shadow-emerald-900/40 transition flex items-center justify-center gap-2 flex-shrink-0"
+          >
+            <i class="fa-solid fa-sparkles"></i>
+            <span>Find Empty Room</span>
+          </button>
+        </form>
+
+        <!-- Preset Chips -->
+        <div class="mt-3 flex items-center gap-2 overflow-x-auto pb-1 text-xs">
+          <span class="text-slate-500 text-[11px] flex-shrink-0">Try asking:</span>
+          <button onclick="setPrompt('I need an AC room on the ground floor for me and my team for the next 2 hours')" class="px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap">
+            ❄️ Ground floor AC (2 hours)
+          </button>
+          <button onclick="setPrompt('Find an empty room on 5th floor right now for 1 hour with projector')" class="px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap">
+            📽️ 5th Floor with Projector
+          </button>
+          <button onclick="setPrompt('Where can a group of 15 sit on 2nd floor without getting kicked out?')" class="px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap">
+            👥 2nd Floor group room
+          </button>
+          <button onclick="setPrompt('Quiet lab with high-speed WiFi for self study right now')" class="px-3 py-1 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap">
+            💻 Quiet Lab with Wi-Fi
+          </button>
+        </div>
+
+        <div id="aiResultBox" class="hidden mt-4 pt-4 border-t border-slate-800/80 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <i class="fa-solid fa-robot"></i> AI Recommended Rooms
+            </h3>
+            <button onclick="dismissAIResult()" class="text-xs text-slate-500 hover:text-slate-300">
+              <i class="fa-solid fa-xmark"></i> Dismiss
+            </button>
+          </div>
+          <div id="aiResultContent" class="text-xs text-slate-200 leading-relaxed bg-slate-950/70 border border-emerald-500/30 rounded-2xl p-4"></div>
+        </div>
+      </div>
+
+      <!-- Time & Amenities Filter Controls -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-clock text-emerald-500"></i>
+            <h2 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-300">Timetable Time & Campus Controls</h2>
+          </div>
+          <button onclick="setToCurrentRealTime()" class="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1.5">
+            <i class="fa-solid fa-rotate-right"></i> Sync to Current College Time
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
+              <i class="fa-solid fa-calendar-day text-emerald-400"></i> Day of Week
+            </label>
+            <select id="locatorDaySelect" onchange="refreshLocatorViews()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="1">Monday</option>
+              <option value="2">Tuesday</option>
+              <option value="3">Wednesday</option>
+              <option value="4">Thursday</option>
+              <option value="5">Friday</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
+              <i class="fa-solid fa-hourglass-half text-teal-400"></i> Period / Time Slot
+            </label>
+            <select id="locatorPeriodSelect" onchange="refreshLocatorViews()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="1">Period 1 (09:00 - 09:50 AM)</option>
+              <option value="2">Period 2 (09:50 - 10:40 AM)</option>
+              <option value="TEA1">Tea Break (10:40 - 10:50 AM)</option>
+              <option value="3">Period 3 (10:50 - 11:40 AM)</option>
+              <option value="4">Period 4 (11:40 - 12:30 PM)</option>
+              <option value="LUNCH">Lunch Break (12:30 - 01:20 PM)</option>
+              <option value="5">Period 5 (01:20 - 02:10 PM)</option>
+              <option value="6">Period 6 (02:10 - 03:00 PM)</option>
+              <option value="TEA2">Tea Break (03:00 - 03:10 PM)</option>
+              <option value="7">Period 7 (03:10 - 04:00 PM)</option>
+              <option value="8">Period 8 (04:00 - 04:50 PM)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
+              <i class="fa-solid fa-sliders text-blue-400"></i> Amenities Filter
+            </label>
+            <select id="locatorAmenityFilter" onchange="refreshLocatorViews()" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <option value="ANY">Any Room Type</option>
+              <option value="AC">AC Only (Air Conditioned)</option>
+              <option value="PROJECTOR">Projector Equipped</option>
+              <option value="LAB">Labs & Specialized Workstations</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3D Building & Floor Viewport Section -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 id="modeHeading" class="text-base sm:text-lg font-black text-white uppercase tracking-wider flex items-center gap-2">
+                <i class="fa-solid fa-building text-emerald-400"></i> 3D Building Overview
+              </h2>
+              <span id="modeSubBadge" class="bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                Full Tower View
+              </span>
+            </div>
+            <p id="modeInstructions" class="text-xs text-slate-400 mt-0.5">
+              Click on any floor slab to enter and inspect its classrooms. Drag with mouse to orbit the 3D model.
+            </p>
+          </div>
+
+          <!-- Controls & View Mode -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <button id="backToBuildingBtn" onclick="exitToBuildingView()" class="hidden px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition flex items-center gap-1.5">
+              <i class="fa-solid fa-arrow-left"></i> Back to Tower
+            </button>
+            <div class="bg-slate-950 p-1 rounded-xl border border-slate-800 flex items-center gap-1">
+              <button id="subView3DBtn" onclick="setLocatorSubView('3D')" class="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white">3D View</button>
+              <button id="subViewGridBtn" onclick="setLocatorSubView('GRID')" class="px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white">Grid List</button>
+            </div>
+            <button onclick="setCameraPreset('iso')" class="px-2.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-xs">Iso</button>
+            <button onclick="setCameraPreset('front')" class="px-2.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 text-xs">Front</button>
+          </div>
+        </div>
+
+        <!-- Quick Floor Selector Bar -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+          <span class="text-slate-500 text-[11px] font-bold uppercase mr-1">Floors:</span>
+          <button onclick="selectFloor(7)" id="flBtn-7" class="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap font-medium">7th Floor</button>
+          <button onclick="selectFloor(6)" id="flBtn-6" class="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap font-medium">6th Floor</button>
+          <button onclick="selectFloor(5)" id="flBtn-5" class="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap font-medium">5th Floor</button>
+          <button onclick="selectFloor(4)" id="flBtn-4" class="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap font-medium">4th Floor</button>
+          <button onclick="selectFloor(3)" id="flBtn-3" class="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap font-medium">3rd Floor</button>
+          <button onclick="selectFloor(2)" id="flBtn-2" class="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap font-medium">2nd Floor</button>
+          <button onclick="selectFloor(0)" id="flBtn-0" class="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap font-medium">Ground Floor</button>
+        </div>
+
+        <!-- 3D Canvas Viewport -->
+        <div id="locator3DCanvasWrapper" class="perspective-stage w-full min-h-[520px] bg-slate-950/85 border border-slate-800/80 rounded-3xl relative flex items-center justify-center p-6 overflow-hidden cursor-grab active:cursor-grabbing blueprint-grid">
+          
+          <div class="absolute top-4 left-4 z-30 bg-slate-900/90 border border-slate-800 backdrop-blur-md px-3.5 py-2 rounded-xl text-xs flex items-center gap-2 pointer-events-none shadow-lg">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 radar-pulse"></span>
+            <span id="activeFloorTitleBadge" class="font-bold text-white uppercase tracking-wider">SRM IST Architectural Model</span>
+          </div>
+
+          <div class="absolute top-4 right-4 z-30 bg-slate-900/90 border border-slate-800 backdrop-blur-md px-3 py-1.5 rounded-xl text-[11px] text-slate-400 pointer-events-none flex items-center gap-2 shadow-lg">
+            <i class="fa-solid fa-arrows-up-down-left-right text-emerald-400"></i>
+            <span>Drag to Orbit</span>
+          </div>
+
+          <div id="isometricWorld" class="isometric-world relative w-full max-w-4xl min-h-[440px] flex items-center justify-center">
+            <!-- Dynamically populated in JavaScript -->
+          </div>
+        </div>
+
+        <!-- Grid List View (Alternative to 3D) -->
+        <div id="locatorGridWrapper" class="space-y-6 hidden">
+          <div id="floorsContainer" class="space-y-6"></div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ==================== FLOATING ATTENDANCE ADVISOR BOT ==================== -->
+  <div class="fixed bottom-5 right-5 z-40">
+    <button onclick="toggleChat()" id="chatLauncherBtn" class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white text-2xl flex items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition shadow-blue-500/40 relative">
+      <i class="fa-solid fa-robot"></i>
+      <span class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-950 rounded-full animate-ping"></span>
+      <span class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-slate-950 rounded-full"></span>
+    </button>
+  </div>
+
+  <!-- Chat Drawer / Window -->
+  <div id="chatDrawer" class="fixed bottom-20 right-3 sm:right-6 w-[94vw] sm:w-[420px] bg-slate-900/95 border border-slate-700/80 rounded-3xl shadow-2xl z-50 flex flex-col overflow-hidden backdrop-blur-2xl hidden transition duration-300 h-[560px]">
+    <div class="p-4 bg-slate-850 border-b border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600/30 to-indigo-600/30 text-blue-400 flex items-center justify-center text-lg border border-blue-500/30">
+          <i class="fa-solid fa-robot"></i>
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-white flex items-center gap-1.5">
+            Attendance Advisor AI
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          </h4>
+          <p class="text-[11px] text-slate-400">Powered by Groq • Llama 3.3 70B</p>
+        </div>
+      </div>
+      <button onclick="toggleChat()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 flex items-center justify-center">
+        <i class="fa-solid fa-xmark text-sm"></i>
+      </button>
+    </div>
+
+    <!-- Suggested Quick Prompts -->
+    <div class="px-3 py-2 bg-slate-950/60 border-b border-slate-800/80 flex gap-1.5 overflow-x-auto text-[11px] whitespace-nowrap">
+      <button onclick="askBotQuick('Hello! Can you introduce yourself?')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700">
+        👋 Hi Advisor!
+      </button>
+      <button onclick="askBotQuick('If I take a 3-day sick leave starting tomorrow, will my attendance drop below 75%?')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700">
+        🤒 3-day leave test?
+      </button>
+      <button onclick="askBotQuick('How many classes can I bunk safely?')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700">
+        🌴 Safe bunks?
+      </button>
+    </div>
+
+    <!-- Chat Messages Feed -->
+    <div id="chatMessages" class="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
+      <div class="flex items-start gap-2.5">
+        <div class="w-7 h-7 rounded-lg bg-blue-600/30 text-blue-400 flex items-center justify-center flex-shrink-0 text-xs">
+          <i class="fa-solid fa-robot"></i>
+        </div>
+        <div class="bg-slate-800 p-3 rounded-2xl rounded-tl-none border border-slate-700/80 text-slate-200 space-y-1">
+          <p>Vanakkam & Welcome! I am your <strong>SRM Attendance Advisor AI</strong>.</p>
+          <p class="text-slate-400">I analyze your section's timetable, slots, and live dashboard stats to protect you from detention.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-3 bg-slate-950 border-t border-slate-800">
+      <form onsubmit="handleChatSubmit(event)" class="flex gap-2">
+        <input type="text" id="chatInput" placeholder="Ask about attendance, bunks, or subjects..." 
+          class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-sans">
+        <button type="submit" id="chatSendBtn" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-xs shadow-md transition flex items-center justify-center">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== ROOM DETAILS & COUNTDOWN MODAL ==================== -->
+  <div id="roomModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md hidden opacity-0 transition-opacity duration-200">
+    <div class="bg-slate-900 border border-slate-700 max-w-2xl w-full rounded-3xl shadow-2xl p-6 space-y-5 overflow-hidden">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl flex-shrink-0">
+            <i class="fa-solid fa-door-open"></i>
+          </div>
+          <div>
+            <h3 id="modalRoomName" class="text-base sm:text-lg font-black text-white">Room Details</h3>
+            <p id="modalRoomSubtitle" class="text-xs text-slate-400">Floor & Amenities</p>
+          </div>
+        </div>
+        <button onclick="closeRoomModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- COUNTDOWN TIMER HUD -->
+      <div id="countdownBox" class="p-4 rounded-2xl border flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div>
+          <span id="countdownTitle" class="text-[10px] font-bold uppercase tracking-wider block text-emerald-400">Live Countdown to Next Lecture</span>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="countdownTimerDigits" class="font-mono text-2xl sm:text-3xl font-black text-white tracking-widest">00:00:00</span>
+            <span id="countdownSubtext" class="text-xs text-emerald-300 font-semibold">Remaining Free</span>
+          </div>
+          <p id="countdownDetails" class="text-[11px] text-slate-400 mt-1">Safe to sit uninterrupted until <strong id="safeUntilTime">--</strong>.</p>
+        </div>
+
+        <div id="squadShareContainer" class="flex flex-col gap-2 w-full sm:w-auto">
+          <button onclick="callTheSquadWhatsApp()" class="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-bold rounded-xl shadow-lg shadow-green-900/40 transition flex items-center justify-center gap-2 text-xs">
+            <i class="fa-brands fa-whatsapp text-base"></i>
+            <span>Call the Squad (WhatsApp)</span>
+          </button>
+          <button onclick="copySquadInviteLink()" id="copySquadBtn" class="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-semibold transition flex items-center justify-center gap-1.5 text-[11px]">
+            <i class="fa-regular fa-copy"></i>
+            <span>Copy Squad Invite</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-bold text-slate-300 uppercase tracking-wider">Full Day Occupancy Timeline</span>
+          <span id="modalTimelineDay" class="text-[11px] text-slate-500 font-medium">Monday</span>
+        </div>
+        <div id="modalTimelineGrid" class="grid grid-cols-8 gap-1.5 text-center text-[10px]"></div>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 text-xs text-slate-300">
+        <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center">
+          <span class="block text-[10px] text-slate-500 uppercase">Capacity</span>
+          <span id="modalCapacity" class="font-bold text-white">--</span>
+        </div>
+        <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center">
+          <span class="block text-[10px] text-slate-500 uppercase">Air Conditioning</span>
+          <span id="modalAC" class="font-bold text-white">--</span>
+        </div>
+        <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center">
+          <span class="block text-[10px] text-slate-500 uppercase">Projector</span>
+          <span id="modalProjector" class="font-bold text-white">--</span>
+        </div>
+        <div class="bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-center">
+          <span class="block text-[10px] text-slate-500 uppercase">Power Sockets</span>
+          <span id="modalSockets" class="font-bold text-white">--</span>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2">
+        <button onclick="closeRoomModal()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl text-xs">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== ON-DUTY (OD) MODAL ==================== -->
+  <div id="odModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md hidden opacity-0 transition-opacity duration-200">
+    <div class="bg-slate-900 border border-slate-700 max-w-lg w-full rounded-3xl shadow-2xl p-6 space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-lg">
+            <i class="fa-solid fa-calendar-plus"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">OD & Medical Leave Simulator</h3>
+            <p class="text-xs text-slate-400">Simulate attendance recovery</p>
+          </div>
+        </div>
+        <button onclick="toggleODModal()" class="w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3.5 text-xs">
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Leave Type</label>
+          <select id="leaveType" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white font-medium focus:ring-2 focus:ring-indigo-500">
+            <option value="OD">On-Duty (OD - Approved: Adds 100% presence for scheduled slots)</option>
+            <option value="Medical">Medical Leave (Recorded for condonation exemption)</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">From Date</label>
+            <input type="date" id="leaveStart" value="2026-09-29" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white">
+          </div>
+          <div>
+            <label class="block text-slate-400 font-semibold mb-1">To Date</label>
+            <input type="date" id="leaveEnd" value="2026-10-01" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-slate-400 font-semibold mb-1">Reason / Event Name</label>
+          <input type="text" id="leaveReason" placeholder="e.g., Tech Fest Hackathon / Fever" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white">
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 pt-2">
+        <button onclick="toggleODModal()" class="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl font-semibold text-xs hover:bg-slate-700">Cancel</button>
+        <button onclick="saveODLeave()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-xs shadow-md">Apply to Timetable</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== UNIFIED HOW IT WORKS MODAL ==================== -->
+  <div id="unifiedHelpModal" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md hidden opacity-0 transition-opacity duration-200">
+    <div class="bg-slate-900 border border-slate-700 max-w-3xl w-full rounded-3xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-3.5">
+          <div class="w-11 h-11 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl">
+            <i class="fa-solid fa-lightbulb"></i>
+          </div>
+          <div>
+            <h3 class="text-base sm:text-lg font-black text-white">How This Unified Platform Works</h3>
+            <p class="text-xs text-slate-400">Attendance Prediction & Real-Time 3D Space Math</p>
+          </div>
+        </div>
+        <button onclick="closeUnifiedHelpModal()" class="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <div class="p-6 space-y-6 overflow-y-auto text-xs text-slate-300 leading-relaxed">
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-2">
+          <h4 class="font-bold text-white text-xs uppercase text-blue-400">1. Attendance Predictor Math</h4>
+          <div class="bg-slate-900 p-2.5 rounded-xl font-mono text-cyan-300 border border-slate-800 text-[11px]">
+            N_total = N_conducted + R_remaining<br/>
+            Req_75 = ceil( 0.75 × N_total )<br/>
+            Classes To Attend = max( 0, Req_75 - Attended )<br/>
+            Safe Bunks = R_remaining - Classes To Attend
+          </div>
+          <p class="text-slate-400 text-[11px]">If Classes To Attend > R_remaining, it triggers an <strong>Irreversible Detention Alert</strong>.</p>
+        </div>
+
+        <div class="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-2">
+          <h4 class="font-bold text-white text-xs uppercase text-emerald-400">2. 3D Free Class Locator & Safe Window</h4>
+          <div class="bg-slate-900 p-2.5 rounded-xl font-mono text-emerald-300 border border-slate-800 text-[11px]">
+            Safe Window = Consecutive free periods × 50 minutes<br/>
+            Countdown Target = Earliest timestamp of the next lecture
+          </div>
+          <p class="text-slate-400 text-[11px]">The 3D model lets you orbit the entire campus tower, click any floor to view classrooms, and use "Call the Squad" to notify project groups via WhatsApp.</p>
+        </div>
+      </div>
+
+      <div class="p-4 border-t border-slate-800 bg-slate-850 flex justify-end">
+        <button onclick="closeUnifiedHelpModal()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs">Got It</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toastNotification" class="fixed bottom-6 right-6 z-50 bg-slate-900 border border-emerald-500 text-white px-4 py-2.5 rounded-2xl text-xs shadow-2xl flex items-center gap-2 transform translate-y-20 opacity-0 transition duration-300 pointer-events-none">
+    <i class="fa-solid fa-circle-check text-emerald-400"></i>
+    <span id="toastMsg">Notification</span>
+  </div>
+
+  <!-- ==================== COMPLETE COMBINED JAVASCRIPT ==================== -->
+  <script>
+    // --- GROQ API CREDENTIAL ---
+    const GROQ_API_KEY = "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";
+    const GROQ_MODEL = "llama-3.3-70b-versatile";
+
+    // --- TIMETABLE DATABASE (10 SECTIONS) ---
+    const TIMETABLE_DATA = {
+      "IV_ECE_B": {
+        name: "IV Year ECE-B (Venue: IST 227)",
+        subjects: [
+          { code: "21GNH401T", name: "Behavioural Psychology", slot: "A", teacher: "Dr. A. Annand" },
+          { code: "21ECC401T", name: "Wireless Comm & Antenna", slot: "B", teacher: "Dr. K. Vigneshwaran" },
+          { code: "21ECC402P", name: "Comp Comm & NetSec", slot: "C", teacher: "Dr. R. Rajasekar" },
+          { code: "21ECE461T", name: "Semiconductor Memory Design", slot: "D", teacher: "Dr. H. SriBhuvaneshwari" },
+          { code: "21ECE463T", name: "Scripting Language for EDA", slot: "E", teacher: "Dr. Sreenivasa Rao Ijada" },
+          { code: "21CSO355T", name: "Machine Learning for All", slot: "F", teacher: "Dr. N. Prasanna Venkatesh" },
+          { code: "21ECC402P-LAB", name: "CCN Lab (IST 108)", slot: "LAB", teacher: "Ms. T. Swetha" }
+        ],
+        schedule: { 1: ["C", "A", "E", "F"], 2: ["C", "E", "F", "B"], 3: ["C", "D", "A", "B"], 4: ["D", "B", "LAB", "LAB", "A"], 5: ["E", "D", "F"] }
+      },
+      "IV_ECE_A": {
+        name: "IV Year ECE-A (Venue: IST 225)",
+        subjects: [
+          { code: "21GNH401T", name: "Behavioural Psychology", slot: "A", teacher: "Dr. A. Anand" },
+          { code: "21ECC401T", name: "Wireless Comm & Antenna", slot: "B", teacher: "Dr. K. Vigneshwaran" },
+          { code: "21ECC402P", name: "Comp Comm & Net Security", slot: "C", teacher: "Dr. S. Jeevanantham" },
+          { code: "21ECE461T", name: "Semiconductor Memory Design", slot: "D", teacher: "Dr. H. SriBhuvaneshwari" },
+          { code: "21ECE463T", name: "Scripting Language for EDA", slot: "E", teacher: "Dr. Sreenivasa Rao Ijada" },
+          { code: "21CSO355T", name: "Machine Learning for All", slot: "F", teacher: "Dr. N. Prasanna Venkatesh" },
+          { code: "21ECC402P-LAB", name: "CCN Lab (IST 108)", slot: "LAB", teacher: "Mrs. T. Swetha" }
+        ],
+        schedule: { 1: ["C", "A", "D"], 2: ["C", "D", "B", "F"], 3: ["B", "LAB", "LAB", "E", "F"], 4: ["F", "A", "E", "B"], 5: ["C", "A", "D", "E"] }
+      },
+      "III_ECE_DS": {
+        name: "III Year ECE Data Science (Venue: IST 519)",
+        subjects: [
+          { code: "21MAB302T", name: "Discrete Mathematics", slot: "A", teacher: "New Faculty 2" },
+          { code: "21ECC301P", name: "Microprocessor & Interfacing", slot: "B", teacher: "Mrs. B. Abirami" },
+          { code: "21ECC303T", name: "VLSI Design & Technology", slot: "C", teacher: "Dr. R. Vinoth Raj" },
+          { code: "21CSO355T", name: "Machine Learning for All", slot: "D", teacher: "Dr. Chitra Devi" },
+          { code: "21ECE371T", name: "Database Design & Management", slot: "E", teacher: "Dr. S. Saraswathi" },
+          { code: "21GNP301L", name: "Community Connect", slot: "F", teacher: "Dr. S. Jeevanantham" },
+          { code: "21PDM301L", name: "Analytical & Logical Thinking", slot: "G", teacher: "CDC-625" },
+          { code: "21LEM301T", name: "Indian Art Form", slot: "H", teacher: "Dr. Prabin Kumar Bera" },
+          { code: "21ECC311L", name: "VLSI / Microprocessor Lab", slot: "LAB", teacher: "Dr. R. Vinothraj" }
+        ],
+        schedule: { 1: ["E", "B", "C", "A"], 2: ["C", "B", "D", "F", "LAB", "LAB"], 3: ["H", "B", "A", "C", "G"], 4: ["A", "D", "E", "F"], 5: ["D", "A", "E", "B", "G", "LAB", "LAB"] }
+      },
+      "III_ECE_B": {
+        name: "III Year ECE-B (Venue: IST 518)",
+        subjects: [
+          { code: "21MAB302T", name: "Discrete Mathematics", slot: "A", teacher: "Dr. M. Thanga Rejini" },
+          { code: "21ECC301P", name: "Microprocessor & Interfacing", slot: "B", teacher: "Mrs. B. Abirami" },
+          { code: "21ECC303T", name: "VLSI Design & Technology", slot: "C", teacher: "Dr. R. Vinoth Raj" },
+          { code: "21ECE468T", name: "System and Network on Chip", slot: "D", teacher: "Dr. V. Manikandan" },
+          { code: "21CSO355T", name: "Machine Learning for All", slot: "E", teacher: "Dr. J. Jencia" },
+          { code: "21GNP301L", name: "Community Connect", slot: "F", teacher: "Dr. H. Sudharsan" },
+          { code: "21PDM301L", name: "Analytical & Logical Thinking", slot: "G", teacher: "CDC-625" },
+          { code: "21LEM301T", name: "Indian Art Form", slot: "H", teacher: "Dr. A. Anand" },
+          { code: "21ECC311L", name: "VLSI / Microprocessor Lab", slot: "LAB", teacher: "Dr. Sreenivasa Rao" }
+        ],
+        schedule: { 1: ["LAB", "LAB", "E", "B", "A", "D"], 2: ["G", "F", "B", "D", "C"], 3: ["G", "B", "B", "A", "H"], 4: ["LAB", "LAB", "A", "C", "E", "F"], 5: ["C", "A", "E", "D"] }
+      },
+      "III_ECE_A": {
+        name: "III Year ECE-A (Venue: IST 518/FN)",
+        subjects: [
+          { code: "21MAB302T", name: "Discrete Mathematics", slot: "A", teacher: "New Faculty 3" },
+          { code: "21ECC301P", name: "Microprocessor & Interfacing", slot: "B", teacher: "Dr. M. Manikandan" },
+          { code: "21ECC303T", name: "VLSI Design & Technology", slot: "C", teacher: "Dr. M. Jothi" },
+          { code: "21ECE468T", name: "System and Network on Chip", slot: "D", teacher: "Dr. V. Manikandan" },
+          { code: "21CSO355T", name: "Machine Learning for All", slot: "E", teacher: "Dr. J. Jencia" },
+          { code: "21GNP301L", name: "Community Connect", slot: "F", teacher: "Dr. V. Rajesh" },
+          { code: "21PDM301L", name: "Analytical & Logical Thinking", slot: "G", teacher: "CDC-625" },
+          { code: "21LEM301T", name: "Indian Art Form", slot: "H", teacher: "Dr. K. Vigneshwaran" },
+          { code: "21ECC311L", name: "VLSI / Microprocessor Lab", slot: "LAB", teacher: "Dr. M. Jothi" }
+        ],
+        schedule: { 1: ["E", "B", "B", "A", "G"], 2: ["H", "D", "B", "B", "G"], 3: ["C", "A", "D", "F", "LAB", "LAB"], 4: ["A", "E", "C", "F"], 5: ["D", "A", "E", "C", "LAB", "LAB"] }
+      },
+      "III_BME": {
+        name: "III Year BME (Venue: IST 211)",
+        subjects: [
+          { code: "21MAB301T", name: "Probability & Statistics", slot: "A", teacher: "Dr. K. M. Karuppusamy" },
+          { code: "21BMC302J", name: "Microcontrollers in Medicine", slot: "B", teacher: "Dr. K. Vigneshwaran" },
+          { code: "21BMC301J", name: "Biomedical Signal Processing", slot: "C", teacher: "Dr. V. N. Senthilkumaran" },
+          { code: "21BME266T", name: "Biometrics", slot: "D", teacher: "Dr. G. Gifta" },
+          { code: "21ECO103T", name: "Modern Wireless Comm", slot: "E", teacher: "Dr. Vaishnavi" },
+          { code: "21BMC303T", name: "Principles of Medical Imaging", slot: "F", teacher: "Dr. N. Prasana Venkatesh" },
+          { code: "21PDM301L", name: "Analytical & Logical Thinking", slot: "G", teacher: "CDC-625" },
+          { code: "21LEM301T", name: "Indian Art Form", slot: "H", teacher: "Dr. G. Gifta" },
+          { code: "21GNP301L", name: "Community Connect", slot: "I", teacher: "Dr. J. Jencia" }
+        ],
+        schedule: { 1: ["G", "LAB", "E", "B", "F", "H"], 2: ["LAB", "LAB", "G", "C", "D", "A", "B"], 3: ["C", "A", "F", "D"], 4: ["I", "A", "C", "E", "B"], 5: ["I", "F", "A", "D", "E"] }
+      },
+      "II_ECE_DS_A": {
+        name: "II Year ECE DS A (Venue: IST 416)",
+        subjects: [
+          { code: "21MAB201T", name: "Transforms & Boundary Problems", slot: "A", teacher: "Dr. C. Arun Kumar" },
+          { code: "21ECC201T", name: "Solid State Devices", slot: "B", teacher: "Dr. Jeevanantham S" },
+          { code: "21CSS201T", name: "Computer Org & Architecture", slot: "C", teacher: "Dr. P. Murugapandiyan" },
+          { code: "21ECC203T", name: "Digital Logic Design", slot: "D", teacher: "Dr. S. Krishnakumar" },
+          { code: "21ECC205T", name: "Electromagnetic Theory", slot: "E", teacher: "Dr. V. Bharathi" },
+          { code: "21LEM201T", name: "Professional Ethics", slot: "F", teacher: "Dr. Jothi M" },
+          { code: "21LEM202T", name: "Universal Human Values-II", slot: "G", teacher: "Mrs. N. Suganthi" },
+          { code: "21PDM201L", name: "Verbal Reasoning", slot: "H", teacher: "CDC-TB-106" },
+          { code: "21PDH209T", name: "Social Engineering", slot: "I", teacher: "Mrs. D. Lavanya" },
+          { code: "21ECC211L", name: "Devices & Digital IC Lab", slot: "LAB", teacher: "Dr. Jeevanantham S" }
+        ],
+        schedule: { 1: ["E", "A", "I", "G", "LAB", "LAB"], 2: ["C", "A", "E", "D", "G", "H"], 3: ["A", "B", "C", "D", "H"], 4: ["B", "C", "A", "F", "LAB", "LAB"], 5: ["D", "B", "E", "C"] }
+      },
+      "II_ECE_DS_B": {
+        name: "II Year ECE DS B (Venue: IST 411)",
+        subjects: [
+          { code: "21MAB201T", name: "Transforms & Boundary Problems", slot: "A", teacher: "NEW FACULTY 3" },
+          { code: "21ECC201T", name: "Solid State Devices", slot: "B", teacher: "Dr. Jeevanantham S" },
+          { code: "21CSS201T", name: "Computer Org & Architecture", slot: "C", teacher: "Dr. P. Murugapandiyan" },
+          { code: "21ECC203T", name: "Digital Logic Design", slot: "D", teacher: "Dr. S. Krishnakumar" },
+          { code: "21ECC205T", name: "Electromagnetic Theory", slot: "E", teacher: "Dr. V. Bharathi" },
+          { code: "21LEM201T", name: "Professional Ethics", slot: "F", teacher: "Dr. K. Vigneshwaran" },
+          { code: "21LEM202T", name: "Universal Human Values-II", slot: "G", teacher: "Mrs. D. Lavanya" },
+          { code: "21PDM201L", name: "Verbal Reasoning", slot: "H", teacher: "CDC-TB-106" },
+          { code: "21PDH209T", name: "Social Engineering", slot: "I", teacher: "Mrs. D. Lavanya" },
+          { code: "21ECC211L", name: "Devices & Digital IC Lab", slot: "LAB", teacher: "Dr. S. Krishnakumar" }
+        ],
+        schedule: { 1: ["LAB", "LAB", "D", "B", "C", "I"], 2: ["LAB", "LAB", "C", "D", "E", "A"], 3: ["G", "I", "E", "A", "D"], 4: ["G", "H", "A", "C", "B", "E"], 5: ["H", "F", "A", "B", "C"] }
+      },
+      "II_BME": {
+        name: "II Year BME (Venue: IST 602)",
+        subjects: [
+          { code: "21MAB201T", name: "Transforms & Boundary Problems", slot: "A", teacher: "Dr. A. Manickam" },
+          { code: "21BMC202T", name: "Biomedical Signals & Systems", slot: "B", teacher: "Dr. Senthil Kumaran V N" },
+          { code: "21BMC203J", name: "Electric & Electronic Circuits", slot: "C", teacher: "Dr. Prabin Kumar Bera" },
+          { code: "21BMC204J", name: "Digital Logic for Medical Systems", slot: "D", teacher: "Dr. G. Gifta" },
+          { code: "21PYS202T", name: "Medical Physics", slot: "E", teacher: "Dr. D. Rajeswari" },
+          { code: "21LEM201T", name: "Professional Ethics", slot: "F", teacher: "Dr. H. SriBhuvaneshwari" },
+          { code: "21LEM202T", name: "Universal Human Values-II", slot: "G", teacher: "Mrs. N. Suganthi" },
+          { code: "21PDM201L", name: "Verbal Reasoning", slot: "H", teacher: "CDC-TB-106" },
+          { code: "21PDH201T", name: "Social Engineering", slot: "I", teacher: "Mrs. Francis Arockiya Mary" }
+        ],
+        schedule: { 1: ["E", "C", "I", "LAB", "LAB"], 2: ["C", "E", "B", "A", "H"], 3: ["B", "D", "A", "H", "G"], 4: ["A", "E", "B", "D", "LAB", "LAB"], 5: ["F", "A", "C", "D", "G"] }
+      },
+      "I_ECE_A": {
+        name: "I Year ECE A (Venue: IST 602)",
+        subjects: [
+          { code: "21MAB102T", name: "Advanced Calculus & Complex Analysis", slot: "A", teacher: "Dr. R. Ragul" },
+          { code: "21CYB101J", name: "Chemistry", slot: "B", teacher: "Dr. P. Pachamuthu" },
+          { code: "21BTB102J", name: "Electronic System & PCB Design", slot: "C", teacher: "Dr. U. Shajith Ali" },
+          { code: "21CSS101J", name: "Programming for Problem Solving", slot: "D", teacher: "Dr. A. Rama Prasath" },
+          { code: "21GNH101J", name: "Philosophy of Engineering", slot: "E", teacher: "Dr. R. Aarthi" },
+          { code: "21BTB103T", name: "Biology", slot: "F", teacher: "Dr. M. Jaya Priya" },
+          { code: "21LEH104T", name: "German Language", slot: "G", teacher: "Mr. Selva" },
+          { code: "21MES101L", name: "Civil & Mech Workshop", slot: "LAB", teacher: "Dr. N.S. Balaji" }
+        ],
+        schedule: { 1: ["E", "E", "B", "A", "LAB", "LAB", "F"], 2: ["C", "B", "A", "D", "LAB", "LAB"], 3: ["B", "E", "D", "LAB", "LAB"], 4: ["G", "G", "A", "D", "F"], 5: ["D", "A", "C", "B", "F", "G"] }
+      }
+    };
+
+    // Standard Period Definitions & Times
+    const PERIOD_SLOTS = [
+      { id: 1, name: "P1", start: "09:00", end: "09:50", startHour: 9, startMin: 0, endHour: 9, endMin: 50 },
+      { id: 2, name: "P2", start: "09:50", end: "10:40", startHour: 9, startMin: 50, endHour: 10, endMin: 40 },
+      { id: 3, name: "P3", start: "10:50", end: "11:40", startHour: 10, startMin: 50, endHour: 11, endMin: 40 },
+      { id: 4, name: "P4", start: "11:40", end: "12:30", startHour: 11, startMin: 40, endHour: 12, endMin: 30 },
+      { id: 5, name: "P5", start: "01:20", end: "02:10", startHour: 13, startMin: 20, endHour: 14, endMin: 10 },
+      { id: 6, name: "P6", start: "02:10", end: "03:00", startHour: 14, startMin: 10, endHour: 15, endMin: 0 },
+      { id: 7, name: "P7", start: "03:10", end: "04:00", startHour: 15, startMin: 10, endHour: 16, endMin: 0 },
+      { id: 8, name: "P8", start: "04:00", end: "04:50", startHour: 16, startMin: 0, endHour: 16, endMin: 50 }
+    ];
+
+    // Master Catalog of Campus Rooms
+    const ROOMS_CATALOG = [
+      { id: "IST_108", name: "IST 108", floor: 0, type: "Special Lab", capacity: 45, ac: true, projector: true, sockets: "Every Desk", desc: "CCN & DSP Lab" },
+      { id: "IST_107", name: "IST 107", floor: 0, type: "Hardware Lab", capacity: 40, ac: true, projector: true, sockets: "High Availability", desc: "MPMC Lab" },
+      { id: "TB_106", name: "TB 106", floor: 0, type: "Tutorial Classroom", capacity: 50, ac: false, projector: true, sockets: "Wall Sockets", desc: "Tutorial Block" },
+      { id: "IST_211", name: "IST 211", floor: 2, type: "Lecture Hall", capacity: 65, ac: true, projector: true, sockets: "Corner Sockets", desc: "III Year BME" },
+      { id: "IST_225", name: "IST 225", floor: 2, type: "Smart Classroom", capacity: 70, ac: true, projector: true, sockets: "Dual Pillars", desc: "IV Year ECE-A" },
+      { id: "IST_227", name: "IST 227", floor: 2, type: "Smart Classroom", capacity: 70, ac: true, projector: true, sockets: "Dual Pillars", desc: "IV Year ECE-B" },
+      { id: "IST_201", name: "IST 201", floor: 2, type: "Seminar Hall", capacity: 80, ac: true, projector: true, sockets: "Stage & Perimeter", desc: "Seminar / NSS" },
+      { id: "IST_309", name: "IST 309", floor: 3, type: "Systems Lab", capacity: 45, ac: true, projector: true, sockets: "Every Desk", desc: "Digital & Micro Systems" },
+      { id: "CHE_LAB", name: "Che Lab", floor: 3, type: "Chemistry Lab", capacity: 50, ac: false, projector: false, sockets: "Limited", desc: "Applied Chemistry" },
+      { id: "IST_411", name: "IST 411", floor: 4, type: "Lecture Hall", capacity: 65, ac: true, projector: true, sockets: "Available", desc: "II Year ECE-DS B" },
+      { id: "IST_416", name: "IST 416", floor: 4, type: "Lecture Hall", capacity: 65, ac: true, projector: true, sockets: "Available", desc: "II Year ECE-DS A" },
+      { id: "IST_401", name: "IST 401", floor: 4, type: "Tutorial Hall", capacity: 45, ac: false, projector: true, sockets: "Perimeter", desc: "Tutorial Hall" },
+      { id: "IST_518", name: "IST 518", floor: 5, type: "Smart Classroom", capacity: 70, ac: true, projector: true, sockets: "Plentiful", desc: "III ECE-A / III ECE-B" },
+      { id: "IST_519", name: "IST 519", floor: 5, type: "Smart Classroom", capacity: 70, ac: true, projector: true, sockets: "Plentiful", desc: "III ECE Data Science" },
+      { id: "IST_510", name: "IST 510", floor: 5, type: "CDC Hall", capacity: 60, ac: true, projector: true, sockets: "Front/Back", desc: "Career Development" },
+      { id: "IST_520", name: "IST 520", floor: 5, type: "Classroom", capacity: 55, ac: false, projector: true, sockets: "Available", desc: "Classroom 520" },
+      { id: "IST_602", name: "IST 602", floor: 6, type: "Lecture Hall", capacity: 65, ac: true, projector: true, sockets: "Side Walls", desc: "II BME & I ECE-A" },
+      { id: "IST_618", name: "IST 618", floor: 6, type: "Computer Lab", capacity: 50, ac: true, projector: true, sockets: "Every Desk", desc: "Programming Lab" },
+      { id: "IST_625", name: "IST 625", floor: 6, type: "CDC Analytics Lab", capacity: 60, ac: true, projector: true, sockets: "Every Desk", desc: "Analytical Skills Lab" },
+      { id: "IST_626", name: "IST 626", floor: 6, type: "Language Lab", capacity: 50, ac: true, projector: true, sockets: "Available", desc: "Language Lab" },
+      { id: "IST_702", name: "IST 702", floor: 7, type: "Seminar Hall", capacity: 85, ac: true, projector: true, sockets: "Full Hall", desc: "Seminar Hall 702" },
+      { id: "IST_710", name: "IST 710", floor: 7, type: "Lecture Hall", capacity: 65, ac: true, projector: true, sockets: "Available", desc: "Lecture Hall 710" }
+    ];
+
+    // Master Schedule Matrix (Extracted from SRM Timetables)
+    const OCCUPANCY_MAP = {
+      "IST_227": { 1: { 1: "IV ECE-B (NetSec)", 2: "IV ECE-B (Psychology)", 3: "IV ECE-B (EDA)", 4: "IV ECE-B (ML)" }, 2: { 1: "IV ECE-B (NetSec)", 2: "IV ECE-B (EDA)", 3: "IV ECE-B (ML)", 4: "IV ECE-B (Antenna)" }, 3: { 1: "IV ECE-B (NetSec)", 2: "IV ECE-B (Memory)", 3: "IV ECE-B (Psychology)", 4: "IV ECE-B (Antenna)" }, 4: { 1: "IV ECE-B (Memory)", 2: "IV ECE-B (Antenna)", 5: "IV ECE-B (Psychology)" }, 5: { 1: "IV ECE-B (EDA)", 2: "IV ECE-B (Memory)", 3: "IV ECE-B (ML)" } },
+      "IST_225": { 1: { 1: "IV ECE-A (NetSec)", 2: "IV ECE-A (Psychology)", 4: "IV ECE-A (Memory)" }, 2: { 1: "IV ECE-A (NetSec)", 2: "IV ECE-A (Memory)", 3: "IV ECE-A (Antenna)", 4: "IV ECE-A (ML)" }, 3: { 1: "IV ECE-A (Antenna)", 4: "IV ECE-A (EDA)", 5: "IV ECE-A (ML)" }, 4: { 1: "IV ECE-A (ML)", 2: "IV ECE-A (Psychology)", 4: "IV ECE-A (EDA)", 5: "IV ECE-A (Antenna)" }, 5: { 1: "IV ECE-A (NetSec)", 2: "IV ECE-A (Psychology)", 4: "IV ECE-A (Memory)", 5: "IV ECE-A (EDA)" } },
+      "IST_519": { 1: { 1: "III ECE-DS (DBMS)", 2: "III ECE-DS (Microproc)", 3: "III ECE-DS (VLSI)", 4: "III ECE-DS (Maths)" }, 2: { 1: "III ECE-DS (VLSI)", 2: "III ECE-DS (Microproc)", 3: "III ECE-DS (ML)", 4: "III ECE-DS (Community)" }, 3: { 1: "III ECE-DS (Indian Art)", 2: "III ECE-DS (Microproc)", 3: "III ECE-DS (Maths)", 4: "III ECE-DS (VLSI)" }, 4: { 1: "III ECE-DS (Maths)", 2: "III ECE-DS (ML)", 3: "III ECE-DS (DBMS)", 4: "III ECE-DS (Community)" }, 5: { 1: "III ECE-DS (ML)", 2: "III ECE-DS (Maths)", 3: "III ECE-DS (DBMS)", 4: "III ECE-DS (Microproc)" } },
+      "IST_518": { 1: { 1: "III ECE-A (ML)", 2: "III ECE-A (Microproc)", 3: "III ECE-A (Microproc)", 4: "III ECE-A (Maths)", 5: "III ECE-B (ML)", 6: "III ECE-B (Microproc)", 7: "III ECE-B (Maths)", 8: "III ECE-B (NoC)" }, 2: { 1: "III ECE-A (Art)", 2: "III ECE-A (NoC)", 3: "III ECE-A (Microproc)", 4: "III ECE-A (Project)", 5: "III ECE-B (Community)", 6: "III ECE-B (Microproc)", 7: "III ECE-B (NoC)", 8: "III ECE-B (VLSI)" }, 3: { 1: "III ECE-A (VLSI)", 2: "III ECE-A (Maths)", 3: "III ECE-A (NoC)", 4: "III ECE-A (Community)", 5: "III ECE-B (Project)", 6: "III ECE-B (Microproc)", 7: "III ECE-B (Maths)", 8: "III ECE-B (Art)" }, 4: { 1: "III ECE-A (Maths)", 2: "III ECE-A (ML)", 3: "III ECE-A (VLSI)", 4: "III ECE-A (Community)", 5: "III ECE-B (Maths)", 6: "III ECE-B (VLSI)", 7: "III ECE-B (ML)", 8: "III ECE-B (Community)" }, 5: { 1: "III ECE-A (NoC)", 2: "III ECE-A (Maths)", 3: "III ECE-A (ML)", 4: "III ECE-A (VLSI)", 5: "III ECE-B (VLSI)", 6: "III ECE-B (Maths)", 7: "III ECE-B (ML)", 8: "III ECE-B (NoC)" } },
+      "IST_211": { 1: { 5: "III BME (Wireless)", 6: "III BME (Microproc)", 7: "III BME (Med Imaging)", 8: "III BME (Art)" }, 2: { 5: "III BME (BioSignal)", 6: "III BME (Biometrics)", 7: "III BME (Probability)", 8: "III BME (Microproc)" }, 3: { 5: "III BME (BioSignal)", 6: "III BME (Probability)", 7: "III BME (Med Imaging)", 8: "III BME (Biometrics)" }, 4: { 5: "III BME (Probability)", 6: "III BME (BioSignal)", 7: "III BME (Wireless)", 8: "III BME (Microproc)" }, 5: { 5: "III BME (Med Imaging)", 6: "III BME (Probability)", 7: "III BME (Biometrics)", 8: "III BME (Wireless)" } },
+      "IST_416": { 1: { 1: "II ECE-DS A (EM Theory)", 2: "II ECE-DS A (Maths)", 3: "II ECE-DS A (Social Eng)" }, 2: { 1: "II ECE-DS A (Comp Org)", 2: "II ECE-DS A (Maths)", 3: "II ECE-DS A (EM Theory)", 4: "II ECE-DS A (Digital Logic)" }, 3: { 1: "II ECE-DS A (Maths)", 2: "II ECE-DS A (Solid State)", 3: "II ECE-DS A (Comp Org)", 4: "II ECE-DS A (Digital Logic)" }, 4: { 1: "II ECE-DS A (Solid State)", 2: "II ECE-DS A (Comp Org)", 3: "II ECE-DS A (Maths)", 4: "II ECE-DS A (Ethics)" }, 5: { 1: "II ECE-DS A (Digital Logic)", 2: "II ECE-DS A (Solid State)", 3: "II ECE-DS A (EM Theory)", 4: "II ECE-DS A (Comp Org)" } },
+      "IST_411": { 1: { 5: "II ECE-DS B (Digital Logic)", 6: "II ECE-DS B (Solid State)", 7: "II ECE-DS B (Comp Org)", 8: "II ECE-DS B (Social Eng)" }, 2: { 5: "II ECE-DS B (Comp Org)", 6: "II ECE-DS B (Digital Logic)", 7: "II ECE-DS B (EM Theory)", 8: "II ECE-DS B (Maths)" }, 3: { 6: "II ECE-DS B (Social Eng)", 7: "II ECE-DS B (EM Theory)", 8: "II ECE-DS B (Maths)" }, 4: { 5: "II ECE-DS B (Maths)", 6: "II ECE-DS B (Comp Org)", 7: "II ECE-DS B (Solid State)", 8: "II ECE-DS B (EM Theory)" }, 5: { 5: "II ECE-DS B (Ethics)", 6: "II ECE-DS B (Maths)", 7: "II ECE-DS B (Solid State)", 8: "II ECE-DS B (Comp Org)" } },
+      "IST_602": { 1: { 1: "II BME (Med Physics)", 2: "II BME (EE Circuits)", 3: "II BME (Social Eng)", 5: "I ECE-A (Philosophy)", 6: "I ECE-A (Philosophy)", 7: "I ECE-A (Chemistry)", 8: "I ECE-A (Maths)" }, 2: { 1: "II BME (EE Circuits)", 2: "II BME (Med Physics)", 3: "II BME (Signals)", 4: "II BME (Maths)", 5: "I ECE-A (PCB Design)", 6: "I ECE-A (Chemistry)", 7: "I ECE-A (Maths)", 8: "I ECE-A (Programming)" }, 3: { 1: "II BME (Signals)", 2: "II BME (Digital Logic)", 3: "II BME (Maths)", 7: "I ECE-A (Chemistry)", 8: "I ECE-A (Philosophy)" }, 4: { 1: "II BME (Maths)", 2: "II BME (Med Physics)", 3: "II BME (Signals)", 4: "II BME (Digital Logic)", 7: "I ECE-A (Maths)", 8: "I ECE-A (CDC)" }, 5: { 1: "II BME (Ethics)", 2: "II BME (Maths)", 3: "II BME (EE Circuits)", 4: "II BME (Digital Logic)" } },
+      "IST_108": { 1: { 3: "III BME Lab", 4: "III BME Lab" }, 2: { 1: "III BME DSP Lab", 2: "III BME DSP Lab", 5: "III ECE-DS Lab", 6: "III ECE-DS Lab" }, 3: { 2: "IV ECE-A Lab", 3: "IV ECE-A Lab", 7: "III ECE-A Lab", 8: "III ECE-A Lab" }, 4: { 3: "IV ECE-B CCN Lab", 4: "IV ECE-B CCN Lab", 1: "III ECE-B Lab", 2: "III ECE-B Lab" }, 5: { 5: "III ECE-A Lab", 6: "III ECE-A Lab", 7: "III ECE-DS Lab", 8: "III ECE-DS Lab" } },
+      "IST_625": { 1: { 5: "III ECE-A CDC", 6: "III ECE-A CDC", 1: "III BME CDC", 2: "III BME CDC" }, 2: { 1: "III ECE-B CDC", 2: "III ECE-B CDC", 5: "III ECE-A CDC", 6: "III ECE-A CDC" }, 3: { 1: "III ECE-B CDC", 7: "III ECE-DS CDC", 8: "III ECE-DS CDC" }, 5: { 5: "III ECE-DS CDC", 6: "III ECE-DS CDC" } }
+    };
+
+    // Shared Globals
+    let userLeaves = [];
+    let barChartInstance = null;
+    let doughnutChartInstance = null;
+    let chatHistory = [];
+
+    // Locator Specific State
+    let current3DMode = 'BUILDING';
+    let selectedFloorNumber = 5;
+    let rotX = 54;
+    let rotZ = -28;
+    let zoomLevel = 1.0;
+    let isDragging = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+    let currentActiveRoom = null;
+    let countdownIntervalId = null;
+    let targetCountdownTimestamp = null;
+
+    // --- TAB SWITCHER LOGIC ---
+    function switchMainTab(tab) {
+      const modAttendance = document.getElementById('moduleAttendance');
+      const modLocator = document.getElementById('moduleLocator');
+      const btnAttendance = document.getElementById('tabBtnAttendance');
+      const btnLocator = document.getElementById('tabBtnLocator');
+
+      if (tab === 'attendance') {
+        modAttendance.classList.remove('hidden');
+        modLocator.classList.add('hidden');
+        btnAttendance.className = "flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 bg-blue-600 text-white shadow-md";
+        btnLocator.className = "flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 text-slate-400 hover:text-white";
+        calculateAll();
+      } else {
+        modAttendance.classList.add('hidden');
+        modLocator.classList.remove('hidden');
+        btnLocator.className = "flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 bg-emerald-600 text-white shadow-md";
+        btnAttendance.className = "flex-1 sm:flex-initial px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2 text-slate-400 hover:text-white";
+        refreshLocatorViews();
+      }
+    }
+
+    // --- ATTENDANCE HELPER ENGINE ---
+    function countScheduledSlots(startDateStr, endDateStr, weeklySchedule) {
+      let start = new Date(startDateStr);
+      let end = new Date(endDateStr);
+      let counts = {};
+      if (start > end) return counts;
+
+      let cur = new Date(start);
+      while (cur <= end) {
+        let day = cur.getDay();
+        if (day >= 1 && day <= 5 && weeklySchedule[day]) {
+          weeklySchedule[day].forEach(slot => {
+            counts[slot] = (counts[slot] || 0) + 1;
+          });
+        }
+        cur.setDate(cur.getDate() + 1);
+      }
+      return counts;
+    }
+
+    function getExcusedSlotCounts(startDateStr, endDateStr, weeklySchedule) {
+      let counts = {};
+      userLeaves.forEach(leave => {
+        if (leave.type === "OD") {
+          let s = new Date(Math.max(new Date(startDateStr), new Date(leave.start)));
+          let e = new Date(Math.min(new Date(endDateStr), new Date(leave.end)));
+          if (s <= e) {
+            let cur = new Date(s);
+            while (cur <= e) {
+              let day = cur.getDay();
+              if (day >= 1 && day <= 5 && weeklySchedule[day]) {
+                weeklySchedule[day].forEach(slot => {
+                  counts[slot] = (counts[slot] || 0) + 1;
+                });
+              }
+              cur.setDate(cur.getDate() + 1);
+            }
+          }
+        }
+      });
+      return counts;
+    }
+
+    function renderSubjects() {
+      const sectionKey = document.getElementById('sectionSelect').value;
+      const section = TIMETABLE_DATA[sectionKey];
+      const container = document.getElementById('subjectsContainer');
+      container.innerHTML = "";
+
+      section.subjects.forEach(sub => {
+        const card = document.createElement('div');
+        card.id = `sub-card-${sub.slot}`;
+        card.className = "bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-lg transition duration-200";
+
+        card.innerHTML = `
+          <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+            <div class="space-y-1 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-[11px] font-black px-2.5 py-0.5 rounded-lg bg-blue-500/10 border border-blue-500/30 text-blue-400">SLOT ${sub.slot}</span>
+                <span class="text-xs font-mono text-slate-400">${sub.code}</span>
+                <span id="badge-${sub.slot}" class="text-[10px] font-bold px-2 py-0.5 rounded-full"></span>
+              </div>
+              <h3 class="text-base font-bold text-white tracking-wide">${sub.name}</h3>
+              <p class="text-xs text-slate-400 flex items-center gap-1.5">
+                <i class="fa-solid fa-chalkboard-user text-slate-500"></i> ${sub.teacher}
+              </p>
+            </div>
+
+            <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
+              <div class="w-full sm:w-36 bg-slate-950 p-2.5 rounded-2xl border border-slate-800">
+                <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1 flex items-center justify-between">
+                  <span>Current %</span>
+                  <i class="fa-solid fa-pen text-slate-600"></i>
+                </label>
+                <div class="relative">
+                  <input type="number" id="input-${sub.slot}" min="0" max="100" value="78"
+                    class="w-full bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1 text-sm font-bold text-white text-center focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                  <span class="absolute right-2.5 top-1 text-xs text-slate-500 font-bold">%</span>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-3 gap-2 bg-slate-950 p-2.5 rounded-2xl border border-slate-800 text-xs w-full sm:w-80">
+                <div>
+                  <span class="block text-[10px] font-semibold text-slate-500 uppercase">Remaining</span>
+                  <span id="rem-${sub.slot}" class="font-bold text-white text-sm">--</span>
+                </div>
+                <div>
+                  <span class="block text-[10px] font-semibold text-slate-500 uppercase">Target 75%</span>
+                  <span id="req75-${sub.slot}" class="font-bold text-sm">--</span>
+                </div>
+                <div>
+                  <span class="block text-[10px] font-semibold text-slate-500 uppercase">Target 90%</span>
+                  <span id="req90-${sub.slot}" class="font-bold text-sm">--</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div id="notice-${sub.slot}" class="hidden mt-3.5 pt-3 border-t text-xs"></div>
+        `;
+        container.appendChild(card);
+      });
+
+      section.subjects.forEach(sub => {
+        document.getElementById(`input-${sub.slot}`).addEventListener('input', calculateAll);
+      });
+
+      calculateAll();
+    }
+
+    function calculateAll() {
+      const sectionKey = document.getElementById('sectionSelect').value;
+      const section = TIMETABLE_DATA[sectionKey];
+      const semStart = document.getElementById('semStartDate').value;
+      const todayVal = document.getElementById('todayDate').value;
+      const targetVal = document.getElementById('targetDate').value;
+
+      const conductedMap = countScheduledSlots(semStart, todayVal, section.schedule);
+      const nextDay = new Date(todayVal);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const remainingMap = countScheduledSlots(nextDay.toISOString().split('T')[0], targetVal, section.schedule);
+      const odMap = getExcusedSlotCounts(semStart, todayVal, section.schedule);
+
+      let totalSubs = section.subjects.length;
+      let countSafe = 0, countDanger = 0, countDetained = 0;
+      let chartLabels = [], chartCurrentPcts = [], chartMaxPcts = [];
+
+      section.subjects.forEach(sub => {
+        const slot = sub.slot;
+        const conducted = conductedMap[slot] || 0;
+        const remaining = remainingMap[slot] || 0;
+        const odCredit = odMap[slot] || 0;
+        const totalProjected = conducted + remaining;
+
+        const currentPct = parseFloat(document.getElementById(`input-${slot}`).value) || 0;
+        const attendedRaw = Math.round((currentPct / 100) * conducted);
+        const effectiveAttended = Math.min(conducted, attendedRaw + odCredit);
+
+        const target75 = Math.ceil(0.75 * totalProjected);
+        const target90 = Math.ceil(0.90 * totalProjected);
+
+        const need75 = Math.max(0, target75 - effectiveAttended);
+        const need90 = Math.max(0, target90 - effectiveAttended);
+
+        const maxAchievable = totalProjected > 0 ? (((effectiveAttended + remaining) / totalProjected) * 100).toFixed(1) : 0;
+
+        chartLabels.push(sub.slot + ": " + sub.code);
+        chartCurrentPcts.push(currentPct);
+        chartMaxPcts.push(parseFloat(maxAchievable));
+
+        const card = document.getElementById(`sub-card-${slot}`);
+        const badge = document.getElementById(`badge-${slot}`);
+        const remEl = document.getElementById(`rem-${slot}`);
+        const req75El = document.getElementById(`req75-${slot}`);
+        const req90El = document.getElementById(`req90-${slot}`);
+        const noticeEl = document.getElementById(`notice-${slot}`);
+
+        remEl.innerText = `${remaining} classes`;
+        card.className = "bg-slate-900 border rounded-3xl p-4 sm:p-5 shadow-lg transition duration-200";
+
+        if (need75 > remaining) {
+          countDetained++;
+          card.classList.add("border-red-600/90", "bg-red-950/20", "loud-detention");
+          badge.className = "text-[10px] font-black px-2 py-0.5 rounded-full bg-red-600 text-white uppercase tracking-wider";
+          badge.innerText = "IRREVERSIBLE DETENTION";
+          req75El.innerText = "IMPOSSIBLE";
+          req75El.className = "font-extrabold text-red-500 text-sm";
+          req90El.innerText = "Unreachable";
+          req90El.className = "font-bold text-slate-500 text-sm";
+
+          const shortfall = need75 - remaining;
+          noticeEl.className = "mt-3.5 pt-3 border-t border-red-900/60 text-red-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2";
+          noticeEl.innerHTML = `
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-skull-crossbones text-red-500 text-base"></i>
+              <span><strong>Detention Alert:</strong> Even attending all <strong>${remaining}</strong> classes gives only <strong>${maxAchievable}%</strong>.</span>
+            </div>
+            <span class="bg-red-900/80 border border-red-600 text-white font-mono px-2.5 py-1 rounded-xl text-[11px] font-bold">
+              Shortfall: -${shortfall} classes
+            </span>
+          `;
+          noticeEl.classList.remove("hidden");
+        } else if (currentPct < 75) {
+          countDanger++;
+          card.classList.add("border-amber-600/70", "bg-amber-950/15");
+          badge.className = "text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500 text-amber-300 uppercase tracking-wider";
+          badge.innerText = "DANGER ZONE";
+          req75El.innerText = `Attend ${need75}`;
+          req75El.className = "font-extrabold text-amber-400 text-sm";
+          req90El.innerText = need90 <= remaining ? `Attend ${need90}` : `Max ${maxAchievable}%`;
+          req90El.className = need90 <= remaining ? "font-bold text-cyan-400 text-sm" : "font-bold text-slate-500 text-sm";
+
+          noticeEl.className = "mt-3.5 pt-3 border-t border-amber-900/60 text-amber-200 flex items-center gap-2";
+          noticeEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-400"></i> Must attend <strong>${need75}</strong> of remaining <strong>${remaining}</strong> periods to clear condonation.`;
+          noticeEl.classList.remove("hidden");
+        } else {
+          countSafe++;
+          card.classList.add("border-slate-800");
+          badge.className = "text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 uppercase tracking-wider";
+          badge.innerText = "SAFE STATUS";
+
+          const safeBunks = remaining - need75;
+          req75El.innerText = `${need75} (${safeBunks} bunks)`;
+          req75El.className = "font-bold text-emerald-400 text-sm";
+          req90El.innerText = need90 <= remaining ? `${need90} more` : `Max ${maxAchievable}%`;
+          req90El.className = need90 <= remaining ? "font-bold text-cyan-400 text-sm" : "font-bold text-slate-500 text-sm";
+          noticeEl.classList.add("hidden");
+        }
+      });
+
+      document.getElementById('counterTotalSubs').innerText = totalSubs;
+      document.getElementById('counterSafe').innerText = countSafe;
+      document.getElementById('counterDanger').innerText = countDanger;
+      document.getElementById('counterDetained').innerText = countDetained;
+
+      const masterAlert = document.getElementById('masterAlert');
+      if (countDetained > 0) masterAlert.classList.remove('hidden');
+      else masterAlert.classList.add('hidden');
+
+      updateVisualCharts(chartLabels, chartCurrentPcts, chartMaxPcts, countSafe, countDanger, countDetained);
+    }
+
+    function updateVisualCharts(labels, currentPcts, maxPcts, safeCount, dangerCount, detainedCount) {
+      const ctxBar = document.getElementById('healthBarChart').getContext('2d');
+      if (barChartInstance) barChartInstance.destroy();
+
+      barChartInstance = new Chart(ctxBar, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            { label: 'Current %', data: currentPcts, backgroundColor: 'rgba(59, 130, 246, 0.85)', borderRadius: 6 },
+            { label: 'Max Possible %', data: maxPcts, backgroundColor: 'rgba(147, 51, 234, 0.4)', borderColor: 'rgba(168, 85, 247, 0.8)', borderWidth: 1, borderRadius: 6 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true, max: 100, grid: { color: 'rgba(51, 65, 85, 0.4)' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+            x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 } } }
+          },
+          plugins: { legend: { labels: { color: '#cbd5e1', font: { size: 11 } } } }
+        }
+      });
+
+      const ctxDoughnut = document.getElementById('healthDoughnutChart').getContext('2d');
+      if (doughnutChartInstance) doughnutChartInstance.destroy();
+
+      doughnutChartInstance = new Chart(ctxDoughnut, {
+        type: 'doughnut',
+        data: {
+          labels: ['Safe (≥75%)', 'Danger (<75%)', 'Detained'],
+          datasets: [{ data: [safeCount, dangerCount, detainedCount], backgroundColor: ['#10b981', '#f59e0b', '#ef4444'], borderWidth: 0 }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { color: '#cbd5e1', font: { size: 10 } } } }
+        }
+      });
+    }
+
+    // --- OD / LEAVE SIMULATOR LOGIC ---
+    function toggleODModal() {
+      const modal = document.getElementById('odModal');
+      if (modal.classList.contains('hidden')) {
+        modal.classList.remove('hidden');
+        setTimeout(() => modal.classList.remove('opacity-0'), 20);
+      } else {
+        modal.classList.add('opacity-0');
+        setTimeout(() => modal.classList.add('hidden'), 200);
+      }
+    }
+
+    function saveODLeave() {
+      const type = document.getElementById('leaveType').value;
+      const start = document.getElementById('leaveStart').value;
+      const end = document.getElementById('leaveEnd').value;
+      const reason = document.getElementById('leaveReason').value || "Academic OD";
+
+      userLeaves.push({ id: Date.now(), type, start, end, reason });
+      toggleODModal();
+      renderLeaves();
+      calculateAll();
+    }
+
+    function removeLeave(id) {
+      userLeaves = userLeaves.filter(l => l.id !== id);
+      renderLeaves();
+      calculateAll();
+    }
+
+    function renderLeaves() {
+      const listEl = document.getElementById('leavesList');
+      const badge = document.getElementById('odCounterBadge');
+      badge.innerText = userLeaves.length;
+
+      if (userLeaves.length === 0) {
+        listEl.innerHTML = `<p class="text-slate-500 italic py-1">No active OD leaves simulated. Click "Add Leave" to test attendance recovery.</p>`;
+        return;
+      }
+
+      listEl.innerHTML = "";
+      userLeaves.forEach(l => {
+        const item = document.createElement('div');
+        item.className = "flex items-center justify-between p-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300";
+        item.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded font-bold text-[10px] ${l.type === 'OD' ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40' : 'bg-rose-600/30 text-rose-300 border border-rose-500/40'}">${l.type}</span>
+            <span class="font-medium text-white">${l.reason}</span>
+            <span class="text-slate-500 text-[11px]">(${l.start} to ${l.end})</span>
+          </div>
+          <button onclick="removeLeave(${l.id})" class="text-red-400 hover:text-red-300 p-1">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        `;
+        listEl.appendChild(item);
+      });
+    }
+
+    // --- ATTENDANCE ADVISOR AI CHATBOT LOGIC ---
+    function toggleChat() {
+      const drawer = document.getElementById('chatDrawer');
+      drawer.classList.toggle('hidden');
+    }
+
+    function askBotQuick(text) {
+      document.getElementById('chatInput').value = text;
+      handleChatSubmit(new Event('submit'));
+    }
+
+    async function handleChatSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('chatInput');
+      const q = input.value.trim();
+      if (!q) return;
+
+      appendChatMessage(q, 'user');
+      input.value = "";
+
+      const box = document.getElementById('chatMessages');
+      const typingId = "typing-" + Date.now();
+      const row = document.createElement('div');
+      row.id = typingId;
+      row.className = "flex items-start gap-2.5";
+      row.innerHTML = `
+        <div class="w-7 h-7 rounded-lg bg-blue-600/30 text-blue-400 flex items-center justify-center flex-shrink-0 text-xs"><i class="fa-solid fa-robot"></i></div>
+        <div class="bg-slate-800 px-3.5 py-2.5 rounded-2xl rounded-tl-none border border-slate-700/80 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+          <span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+          <span class="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></span>
+        </div>
+      `;
+      box.appendChild(row);
+      box.scrollTop = box.scrollHeight;
+
+      try {
+        const response = await callGroqAdvisor(q);
+        document.getElementById(typingId)?.remove();
+        appendChatMessage(response, 'bot');
+      } catch (err) {
+        document.getElementById(typingId)?.remove();
+        const fallback = generateAdvisorResponseLocal(q);
+        appendChatMessage(fallback, 'bot');
+      }
+    }
+
+    function appendChatMessage(msg, sender) {
+      const box = document.getElementById('chatMessages');
+      const row = document.createElement('div');
+      row.className = `flex items-start gap-2.5 ${sender === 'user' ? 'justify-end' : ''}`;
+
+      if (sender === 'bot') {
+        let formatted = msg.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n\n/g, '<br/><br/>').replace(/\n/g, '<br/>');
+        row.innerHTML = `
+          <div class="w-7 h-7 rounded-lg bg-blue-600/30 text-blue-400 flex items-center justify-center flex-shrink-0 text-xs"><i class="fa-solid fa-robot"></i></div>
+          <div class="bg-slate-800 p-3 rounded-2xl rounded-tl-none border border-slate-700/80 text-slate-200 space-y-1 max-w-[85%] leading-relaxed">${formatted}</div>
+        `;
+      } else {
+        row.innerHTML = `<div class="bg-blue-600 text-white p-3 rounded-2xl rounded-tr-none text-xs max-w-[85%] font-medium">${msg}</div>`;
+      }
+      box.appendChild(row);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    async function callGroqAdvisor(userMessage) {
+      const sectionKey = document.getElementById('sectionSelect').value;
+      const section = TIMETABLE_DATA[sectionKey];
+      const todayVal = document.getElementById('todayDate').value;
+      const targetVal = document.getElementById('targetDate').value;
+      const semStart = document.getElementById('semStartDate').value;
+
+      const conductedMap = countScheduledSlots(semStart, todayVal, section.schedule);
+      const nextDay = new Date(todayVal);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const remainingMap = countScheduledSlots(nextDay.toISOString().split('T')[0], targetVal, section.schedule);
+
+      let subjectStats = section.subjects.map(s => {
+        const cond = conductedMap[s.slot] || 0;
+        const rem = remainingMap[s.slot] || 0;
+        const curPct = document.getElementById(`input-${s.slot}`)?.value || 0;
+        return `• Slot ${s.slot} | ${s.name}: Current ${curPct}%, Remaining ${rem}`;
+      }).join("\n");
+
+      const systemPrompt = `You are the SRM IST Attendance Advisor AI for ${section.name}.
+Today: ${todayVal}. Semester: Aug 29 – Nov 29, 2026.
+Subjects Data:
+${subjectStats}
+Answer strictly about attendance, 75% cutoff, safe bunks, and leaves. Be encouraging, precise, and concise.`;
+
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }],
+          temperature: 0.25,
+          max_tokens: 450
+        })
+      });
+
+      const data = await response.json();
+      return data.choices[0].message.content;
+    }
+
+    function generateAdvisorResponseLocal(query) {
+      return `Vanakkam! 👋 I analyzed your current attendance data. Check the green tags on your subject cards above to see your exact safe bunks before dropping below the mandatory 75% condonation mark.`;
+    }
+
+    // --- FREE CLASS LOCATOR (ROUND 2) ENGINE ---
+    function setLocatorSubView(subView) {
+      const c3d = document.getElementById('locator3DCanvasWrapper');
+      const cGrid = document.getElementById('locatorGridWrapper');
+      const b3d = document.getElementById('subView3DBtn');
+      const bGrid = document.getElementById('subViewGridBtn');
+
+      if (subView === '3D') {
+        c3d.classList.remove('hidden');
+        cGrid.classList.add('hidden');
+        b3d.className = "px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white";
+        bGrid.className = "px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white";
+        render3DView();
+      } else {
+        c3d.classList.add('hidden');
+        cGrid.classList.remove('hidden');
+        bGrid.className = "px-3 py-1 rounded-lg text-xs font-bold bg-emerald-600 text-white";
+        b3d.className = "px-3 py-1 rounded-lg text-xs font-semibold text-slate-400 hover:text-white";
+        renderFloorGrid();
+      }
+    }
+
+    function refreshLocatorViews() {
+      render3DView();
+      renderFloorGrid();
+    }
+
+    function getRoomFreeMetrics(roomId, day, periodId) {
+      if (periodId === "TEA1" || periodId === "TEA2" || periodId === "LUNCH") {
+        return { isFree: true, currentOcc: null, freePeriodsCount: 1, freeMinutes: 20, nextOccupiedAt: "Next Period", nextSlotHour: 13, nextSlotMin: 20 };
+      }
+
+      const pNum = parseInt(periodId);
+      const schedule = (OCCUPANCY_MAP[roomId] && OCCUPANCY_MAP[roomId][day]) ? OCCUPANCY_MAP[roomId][day] : {};
+      const currentOcc = schedule[pNum];
+
+      if (currentOcc) {
+        return { isFree: false, currentOcc: currentOcc, freePeriodsCount: 0, freeMinutes: 0, nextOccupiedAt: "Now", nextSlotHour: null, nextSlotMin: null };
+      }
+
+      let freeCount = 0;
+      let nextOccTime = "04:50 PM";
+      let nextHour = 16, nextMin = 50;
+
+      for (let p = pNum; p <= 8; p++) {
+        if (!schedule[p]) freeCount++;
+        else {
+          const occSlot = PERIOD_SLOTS.find(s => s.id === p);
+          if (occSlot) {
+            nextOccTime = occSlot.start;
+            nextHour = occSlot.startHour;
+            nextMin = occSlot.startMin;
+          }
+          break;
+        }
+      }
+
+      return {
+        isFree: true,
+        currentOcc: null,
+        freePeriodsCount: freeCount,
+        freeMinutes: freeCount * 50,
+        nextOccupiedAt: nextOccTime,
+        nextSlotHour: nextHour,
+        nextSlotMin: nextMin
+      };
+    }
+
+    function render3DView() {
+      if (current3DMode === 'BUILDING') render3DBuildingStack();
+      else render3DFloorRooms();
+    }
+
+    function render3DBuildingStack() {
+      const day = parseInt(document.getElementById('locatorDaySelect').value);
+      const periodVal = document.getElementById('locatorPeriodSelect').value;
+
+      document.getElementById('modeHeading').innerHTML = `<i class="fa-solid fa-building text-emerald-400"></i> 3D Building Overview`;
+      document.getElementById('modeSubBadge').innerText = "Full Tower View";
+      document.getElementById('modeInstructions').innerText = "Click on any floor slab to enter and inspect its classrooms.";
+      document.getElementById('backToBuildingBtn').classList.add('hidden');
+      document.getElementById('activeFloorTitleBadge').innerText = "SRM IST 7-Floor Tower Model";
+
+      [0, 2, 3, 4, 5, 6, 7].forEach(f => {
+        const btn = document.getElementById(`flBtn-${f}`);
+        if (btn) btn.className = "px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap font-medium";
+      });
+
+      const world = document.getElementById('isometricWorld');
+      world.innerHTML = "";
+      world.className = "isometric-world relative w-full max-w-xl min-h-[460px] flex flex-col justify-center items-center py-4";
+
+      const floorLevels = [
+        { num: 7, name: "7th Floor", subtitle: "IST 702, 710 • Seminar Halls" },
+        { num: 6, name: "6th Floor", subtitle: "IST 602, 618, 625, 626 • Labs & CDC" },
+        { num: 5, name: "5th Floor", subtitle: "IST 518, 519, 510, 520 • Core ECE" },
+        { num: 4, name: "4th Floor", subtitle: "IST 411, 416, 401 • II Year Halls" },
+        { num: 3, name: "3rd Floor", subtitle: "IST 309, Che Lab • Chemistry & Systems" },
+        { num: 2, name: "2nd Floor", subtitle: "IST 211, 225, 227, 201 • Senior Depts" },
+        { num: 0, name: "Ground Floor", subtitle: "IST 108, 107, TB 106 • Hardware Labs" }
+      ];
+
+      floorLevels.forEach((fl, idx) => {
+        const roomsOnFloor = ROOMS_CATALOG.filter(r => r.floor === fl.num);
+        let flFree = 0, flBusy = 0;
+
+        roomsOnFloor.forEach(r => {
+          const m = getRoomFreeMetrics(r.id, day, periodVal);
+          if (m.isFree) flFree++;
+          else flBusy++;
+        });
+
+        const slab = document.createElement('div');
+        slab.className = `building-floor-slab relative w-full p-4 rounded-2xl border-2 flex items-center justify-between mb-3 shadow-xl backdrop-blur-md ${flFree > 0 ? 'bg-slate-900/90 border-emerald-500/60' : 'bg-slate-950/90 border-slate-800'}`;
+        slab.style.transform = `translateZ(${(6 - idx) * 35}px)`;
+        slab.onclick = (e) => {
+          e.stopPropagation();
+          selectFloor(fl.num);
+        };
+
+        slab.innerHTML = `
+          <div class="flex items-center gap-3">
+            <span class="w-10 h-10 rounded-xl ${flFree > 0 ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' : 'bg-slate-800 text-slate-400'} flex items-center justify-center font-black text-sm">
+              ${fl.num === 0 ? 'G' : fl.num + 'F'}
+            </span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="text-sm font-black text-white">${fl.name}</h4>
+                <span class="text-[10px] text-slate-400">(${roomsOnFloor.length} rooms)</span>
+              </div>
+              <p class="text-[11px] text-slate-400">${fl.subtitle}</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-black ${flFree > 0 ? 'text-emerald-400' : 'text-slate-500'}">
+              ${flFree > 0 ? `<i class="fa-solid fa-circle-check mr-1"></i>${flFree} Free` : 'All Busy'}
+            </span>
+            <button class="px-3 py-1.5 rounded-xl bg-emerald-600/20 border border-emerald-500/50 text-emerald-300 font-bold text-xs">Enter Floor</button>
+          </div>
+        `;
+        world.appendChild(slab);
+      });
+
+      applyPlaneTransform();
+    }
+
+    function render3DFloorRooms() {
+      const activeFloor = selectedFloorNumber;
+      const day = parseInt(document.getElementById('locatorDaySelect').value);
+      const periodVal = document.getElementById('locatorPeriodSelect').value;
+      const amenityFilter = document.getElementById('locatorAmenityFilter').value;
+
+      const floorRooms = ROOMS_CATALOG.filter(r => r.floor === activeFloor);
+      const floorNameStr = activeFloor === 0 ? "Ground & 1st Floor" : `${activeFloor}th Floor`;
+
+      document.getElementById('modeHeading').innerHTML = `<i class="fa-solid fa-door-open text-emerald-400"></i> ${floorNameStr} Classrooms`;
+      document.getElementById('modeSubBadge').innerText = "Floor Room View";
+      document.getElementById('backToBuildingBtn').classList.remove('hidden');
+      document.getElementById('activeFloorTitleBadge').innerText = `${floorNameStr} Layout`;
+
+      [0, 2, 3, 4, 5, 6, 7].forEach(f => {
+        const btn = document.getElementById(`flBtn-${f}`);
+        if (!btn) return;
+        btn.className = f === activeFloor 
+          ? "px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-bold whitespace-nowrap shadow-md"
+          : "px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:border-emerald-500/50 hover:text-white transition whitespace-nowrap font-medium";
+      });
+
+      const world = document.getElementById('isometricWorld');
+      world.innerHTML = "";
+      world.className = "isometric-world relative w-full max-w-4xl min-h-[440px] grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 p-6 sm:p-8 rounded-3xl bg-slate-900/60 border-2 border-emerald-500/20 shadow-2xl backdrop-blur-sm animate-zoom-in";
+
+      floorRooms.forEach(room => {
+        if (amenityFilter === "AC" && !room.ac) return;
+        if (amenityFilter === "PROJECTOR" && !room.projector) return;
+        if (amenityFilter === "LAB" && !room.type.includes("Lab")) return;
+
+        const metrics = getRoomFreeMetrics(room.id, day, periodVal);
+        const cube = document.createElement('div');
+        cube.className = `room-block-3d relative p-5 rounded-3xl cursor-pointer flex flex-col justify-between min-h-[160px] ${metrics.isFree ? 'room-wall-free' : 'room-wall-occ'}`;
+        cube.onclick = (e) => {
+          e.stopPropagation();
+          openRoomModal(room.id);
+        };
+
+        cube.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-mono text-xs font-black tracking-wider text-white">${room.name}</span>
+              ${metrics.isFree ? '<span class="w-3.5 h-3.5 rounded-full bg-emerald-400 radar-pulse inline-block"></span>' : '<span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span>'}
+            </div>
+            <h4 class="text-sm font-black text-white leading-tight">${room.desc}</h4>
+            <p class="text-[11px] text-slate-300 mt-1">${room.type} • ${room.capacity} seats</p>
+          </div>
+          <div class="mt-4 pt-2.5 border-t border-white/10 flex items-center justify-between text-xs">
+            <span class="font-bold ${metrics.isFree ? 'text-emerald-300' : 'text-red-300'}">
+              ${metrics.isFree ? `Free ${Math.floor(metrics.freeMinutes / 60)}h ${metrics.freeMinutes % 60}m` : 'In Session'}
+            </span>
+            <span class="text-slate-400 flex items-center gap-1.5">
+              ${room.ac ? '<i class="fa-solid fa-snowflake text-cyan-300"></i>' : ''}
+              ${room.projector ? '<i class="fa-solid fa-video text-purple-300"></i>' : ''}
+            </span>
+          </div>
+        `;
+        world.appendChild(cube);
+      });
+
+      applyPlaneTransform();
+    }
+
+    function selectFloor(num) {
+      selectedFloorNumber = num;
+      current3DMode = 'FLOOR_ROOMS';
+      rotX = 54; rotZ = -28; zoomLevel = 1.0;
+      render3DFloorRooms();
+    }
+
+    function exitToBuildingView() {
+      current3DMode = 'BUILDING';
+      rotX = 48; rotZ = -24; zoomLevel = 0.95;
+      render3DBuildingStack();
+    }
+
+    function renderFloorGrid() {
+      const day = parseInt(document.getElementById('locatorDaySelect').value);
+      const periodVal = document.getElementById('locatorPeriodSelect').value;
+      const amenityFilter = document.getElementById('locatorAmenityFilter').value;
+      const container = document.getElementById('floorsContainer');
+      container.innerHTML = "";
+
+      const floorsMap = {
+        0: { name: "Ground Floor", icon: "fa-tree", rooms: [] },
+        2: { name: "2nd Floor", icon: "fa-stairs", rooms: [] },
+        3: { name: "3rd Floor", icon: "fa-stairs", rooms: [] },
+        4: { name: "4th Floor", icon: "fa-stairs", rooms: [] },
+        5: { name: "5th Floor", icon: "fa-stairs", rooms: [] },
+        6: { name: "6th Floor", icon: "fa-stairs", rooms: [] },
+        7: { name: "7th Floor", icon: "fa-building", rooms: [] }
+      };
+
+      ROOMS_CATALOG.forEach(room => {
+        if (amenityFilter === "AC" && !room.ac) return;
+        if (amenityFilter === "PROJECTOR" && !room.projector) return;
+        if (amenityFilter === "LAB" && !room.type.includes("Lab")) return;
+
+        const metrics = getRoomFreeMetrics(room.id, day, periodVal);
+        if (floorsMap[room.floor]) floorsMap[room.floor].rooms.push({ room, metrics });
+      });
+
+      Object.keys(floorsMap).forEach(flKey => {
+        const floorData = floorsMap[flKey];
+        if (floorData.rooms.length === 0) return;
+
+        const floorCard = document.createElement('div');
+        floorCard.className = "bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-xl space-y-4";
+        floorCard.innerHTML = `
+          <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
+            <h3 class="text-sm font-black text-white uppercase flex items-center gap-2">
+              <i class="fa-solid ${floorData.icon} text-emerald-400"></i> ${floorData.name}
+            </h3>
+            <span class="text-xs text-slate-400">${floorData.rooms.filter(r => r.metrics.isFree).length} available</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            ${floorData.rooms.map(({ room, metrics }) => `
+              <div onclick="openRoomModal('${room.id}')" class="p-3.5 rounded-2xl border ${metrics.isFree ? 'border-emerald-500/50 bg-slate-950' : 'border-slate-800 bg-slate-950/40 opacity-80'} cursor-pointer">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono text-xs font-bold text-white">${room.name}</span>
+                  <span class="text-[10px] font-bold ${metrics.isFree ? 'text-emerald-400' : 'text-red-400'}">${metrics.isFree ? 'Free' : 'Busy'}</span>
+                </div>
+                <h4 class="text-xs font-semibold text-slate-300 mt-1">${room.desc}</h4>
+                <p class="text-[10px] text-slate-500 mt-0.5">${room.type} • Safe: ${metrics.nextOccupiedAt}</p>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        container.appendChild(floorCard);
+      });
+    }
+
+    // 3D Canvas Mouse & Touch Drag Controls
+    function applyPlaneTransform() {
+      const world = document.getElementById('isometricWorld');
+      if (world) world.style.transform = `rotateX(${rotX}deg) rotateZ(${rotZ}deg) scale(${zoomLevel})`;
+    }
+
+    function setCameraPreset(preset) {
+      if (preset === 'iso') { rotX = 54; rotZ = -28; zoomLevel = 1.0; }
+      else if (preset === 'front') { rotX = 18; rotZ = 0; zoomLevel = 1.0; }
+      applyPlaneTransform();
+    }
+
+    const canvasViewport = document.getElementById('locator3DCanvasWrapper');
+
+    canvasViewport.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.room-block-3d') || e.target.closest('.building-floor-slab')) return;
+      isDragging = true;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        rotZ += (e.clientX - lastMouseX) * 0.35;
+        rotX = Math.max(15, Math.min(85, rotX - (e.clientY - lastMouseY) * 0.25));
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+        applyPlaneTransform();
+      }
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+    canvasViewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      zoomLevel = Math.max(0.65, Math.min(1.5, zoomLevel - e.deltaY * 0.0012));
+      applyPlaneTransform();
+    }, { passive: false });
+
+    // Touch Support for Mobile
+    canvasViewport.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1) {
+        isDragging = true;
+        lastMouseX = e.touches[0].clientX;
+        lastMouseY = e.touches[0].clientY;
+      }
+    });
+
+    window.addEventListener('touchmove', (e) => {
+      if (isDragging && e.touches.length === 1) {
+        rotZ += (e.touches[0].clientX - lastMouseX) * 0.4;
+        rotX = Math.max(15, Math.min(85, rotX - (e.touches[0].clientY - lastMouseY) * 0.3));
+        lastMouseX = e.touches[0].clientX;
+        lastMouseY = e.touches[0].clientY;
+        applyPlaneTransform();
+      }
+    });
+
+    window.addEventListener('touchend', () => { isDragging = false; });
+
+    // --- COUNTDOWN & SQUAD SHARE MODAL ---
+    function openRoomModal(roomId) {
+      const room = ROOMS_CATALOG.find(r => r.id === roomId);
+      if (!room) return;
+      currentActiveRoom = room;
+
+      const day = parseInt(document.getElementById('locatorDaySelect').value);
+      const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const periodVal = document.getElementById('locatorPeriodSelect').value;
+      const metrics = getRoomFreeMetrics(roomId, day, periodVal);
+
+      document.getElementById('modalRoomName').innerText = `${room.name} — ${room.desc}`;
+      document.getElementById('modalRoomSubtitle').innerText = `${room.floor === 0 ? "Ground Floor" : room.floor + "th Floor"} • ${room.type}`;
+      document.getElementById('modalTimelineDay').innerText = dayNames[day];
+      document.getElementById('modalCapacity').innerText = `${room.capacity} seats`;
+      document.getElementById('modalAC').innerText = room.ac ? "Yes (AC)" : "Non-AC";
+      document.getElementById('modalProjector').innerText = room.projector ? "HD Projector" : "No";
+      document.getElementById('modalSockets').innerText = room.sockets;
+      document.getElementById('safeUntilTime').innerText = metrics.nextOccupiedAt;
+
+      const countdownBox = document.getElementById('countdownBox');
+      const digitsEl = document.getElementById('countdownTimerDigits');
+      const titleEl = document.getElementById('countdownTitle');
+      const subtextEl = document.getElementById('countdownSubtext');
+      const squadShare = document.getElementById('squadShareContainer');
+
+      if (countdownIntervalId) clearInterval(countdownIntervalId);
+
+      if (metrics.isFree) {
+        countdownBox.className = "p-4 rounded-2xl border border-emerald-500/50 bg-emerald-950/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4";
+        titleEl.innerText = "Live Uninterrupted Countdown";
+        subtextEl.innerText = "Remaining Safe";
+        squadShare.classList.remove('hidden');
+
+        const now = new Date();
+        targetCountdownTimestamp = new Date();
+        targetCountdownTimestamp.setHours(metrics.nextSlotHour || 16, metrics.nextSlotMin || 50, 0, 0);
+        if (targetCountdownTimestamp <= now) {
+          targetCountdownTimestamp = new Date(now.getTime() + metrics.freeMinutes * 60 * 1000);
+        }
+
+        updateLiveTimer(digitsEl);
+        countdownIntervalId = setInterval(() => updateLiveTimer(digitsEl), 1000);
+      } else {
+        countdownBox.className = "p-4 rounded-2xl border border-red-500/50 bg-red-950/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4";
+        titleEl.innerText = "Class In Session (Do Not Disturb)";
+        digitsEl.innerText = "OCCUPIED";
+        subtextEl.innerText = metrics.currentOcc;
+        squadShare.classList.add('hidden');
+      }
+
+      // Schedule timeline
+      const timelineGrid = document.getElementById('modalTimelineGrid');
+      timelineGrid.innerHTML = "";
+      const daySchedule = (OCCUPANCY_MAP[roomId] && OCCUPANCY_MAP[roomId][day]) ? OCCUPANCY_MAP[roomId][day] : {};
+
+      PERIOD_SLOTS.forEach(slot => {
+        const occ = daySchedule[slot.id];
+        const isCur = parseInt(periodVal) === slot.id;
+        const block = document.createElement('div');
+        block.className = `p-2 rounded-xl border flex flex-col justify-between ${occ ? 'bg-red-950/30 border-red-800/40 text-red-300' : 'bg-emerald-950/30 border-emerald-800/40 text-emerald-300'} ${isCur ? 'ring-2 ring-white' : ''}`;
+        block.innerHTML = `
+          <span class="font-mono font-bold text-[9px] text-slate-400">${slot.name}</span>
+          <span class="font-semibold text-[9px] mt-1 line-clamp-1">${occ ? occ : 'FREE'}</span>
+        `;
+        timelineGrid.appendChild(block);
+      });
+
+      const modal = document.getElementById('roomModal');
+      modal.classList.remove('hidden');
+      setTimeout(() => modal.classList.remove('opacity-0'), 20);
+    }
+
+    function updateLiveTimer(digitsEl) {
+      if (!targetCountdownTimestamp) return;
+      const diffMs = targetCountdownTimestamp - new Date();
+      if (diffMs <= 0) {
+        digitsEl.innerText = "00:00:00";
+        clearInterval(countdownIntervalId);
+        return;
+      }
+      const hours = Math.floor(diffMs / 3600000);
+      const mins = Math.floor((diffMs % 3600000) / 60000);
+      const secs = Math.floor((diffMs % 60000) / 1000);
+      digitsEl.innerText = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function closeRoomModal() {
+      if (countdownIntervalId) clearInterval(countdownIntervalId);
+      const modal = document.getElementById('roomModal');
+      modal.classList.add('opacity-0');
+      setTimeout(() => modal.classList.add('hidden'), 200);
+    }
+
+    function callTheSquadWhatsApp() {
+      if (!currentActiveRoom) return;
+      const day = parseInt(document.getElementById('locatorDaySelect').value);
+      const periodVal = document.getElementById('locatorPeriodSelect').value;
+      const metrics = getRoomFreeMetrics(currentActiveRoom.id, day, periodVal);
+      const floorStr = currentActiveRoom.floor === 0 ? "Ground Floor" : `${currentActiveRoom.floor}th Floor`;
+
+      const msg = `📍 Heading to ${currentActiveRoom.name} (${floorStr}). Free until ${metrics.nextOccupiedAt} (${Math.floor(metrics.freeMinutes / 60)}h ${metrics.freeMinutes % 60}m left). Amenities: ${currentActiveRoom.ac ? 'AC ❄️' : 'Non-AC'}, ${currentActiveRoom.projector ? 'Projector 📽️' : ''}. Come fast!`;
+
+      if (navigator.share) {
+        navigator.share({ title: `Free Room: ${currentActiveRoom.name}`, text: msg }).catch(() => {
+          window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+        });
+      } else {
+        window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+      }
+    }
+
+    function copySquadInviteLink() {
+      if (!currentActiveRoom) return;
+      const day = parseInt(document.getElementById('locatorDaySelect').value);
+      const periodVal = document.getElementById('locatorPeriodSelect').value;
+      const metrics = getRoomFreeMetrics(currentActiveRoom.id, day, periodVal);
+      const floorStr = currentActiveRoom.floor === 0 ? "Ground Floor" : `${currentActiveRoom.floor}th Floor`;
+
+      const msg = `📍 Heading to ${currentActiveRoom.name} (${floorStr}). Free until ${metrics.nextOccupiedAt}. Amenities: ${currentActiveRoom.ac ? 'AC ❄️' : 'Non-AC'}. Come fast!`;
+      navigator.clipboard.writeText(msg).then(() => showToast("Squad invite copied to clipboard!"));
+    }
+
+    function showToast(text) {
+      const toast = document.getElementById('toastNotification');
+      document.getElementById('toastMsg').innerText = text;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 2500);
+    }
+
+    // --- AI ROOM FINDER ENGINE ---
+    function setPrompt(txt) {
+      document.getElementById('aiSearchInput').value = txt;
+      handleAISearch(new Event('submit'));
+    }
+
+    async function handleAISearch(e) {
+      e.preventDefault();
+      const query = document.getElementById('aiSearchInput').value.trim();
+      if (!query) return;
+
+      const resultBox = document.getElementById('aiResultBox');
+      const resultContent = document.getElementById('aiResultContent');
+      const searchBtn = document.getElementById('aiSearchBtn');
+
+      searchBtn.disabled = true;
+      searchBtn.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i> Searching...`;
+      resultBox.classList.remove('hidden');
+      resultContent.innerHTML = `<span class="text-slate-400 italic">Scanning campus timetables...</span>`;
+
+      try {
+        const response = await callGroqRoomFinder(query);
+        resultContent.innerHTML = response;
+      } catch (err) {
+        const fallback = localRoomMatcher(query);
+        resultContent.innerHTML = fallback;
+      } finally {
+        searchBtn.disabled = false;
+        searchBtn.innerHTML = `<i class="fa-solid fa-sparkles"></i> <span>Find Empty Room</span>`;
+      }
+    }
+
+    async function callGroqRoomFinder(userQuery) {
+      const day = parseInt(document.getElementById('locatorDaySelect').value);
+      const periodVal = document.getElementById('locatorPeriodSelect').value;
+
+      const roomSnapshots = ROOMS_CATALOG.map(r => {
+        const m = getRoomFreeMetrics(r.id, day, periodVal);
+        return { name: r.name, floor: r.floor, ac: r.ac, isFree: m.isFree, freeMinutes: m.freeMinutes, nextAt: m.nextOccupiedAt };
+      });
+
+      const systemPrompt = `You are SRM Free Class Locator AI. Day: ${day}, Period: ${periodVal}.
+Data: ${JSON.stringify(roomSnapshots)}
+Return 1-3 best matching free rooms based on floor, AC, and duration. Format with HTML tags (<b>, <ul>, <li>).`;
+
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${GROQ_API_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userQuery }],
+          temperature: 0.2,
+          max_tokens: 400
+        })
+      });
+
+      const data = await res.json();
+      return data.choices[0].message.content;
+    }
+
+    function localRoomMatcher(query) {
+      const q = query.toLowerCase();
+      const day = parseInt(document.getElementById('locatorDaySelect').value);
+      const periodVal = document.getElementById('locatorPeriodSelect').value;
+
+      let matches = ROOMS_CATALOG.filter(r => {
+        const m = getRoomFreeMetrics(r.id, day, periodVal);
+        return m.isFree;
+      });
+
+      if (matches.length === 0) return `<p class="text-amber-300">No rooms currently free.</p>`;
+
+      let html = `<p class="mb-2">Found <strong>${matches.length}</strong> empty room(s):</p><ul class="space-y-2">`;
+      matches.slice(0, 3).forEach(r => {
+        const m = getRoomFreeMetrics(r.id, day, periodVal);
+        html += `
+          <li class="p-2.5 rounded-xl bg-slate-900 border border-emerald-500/30 flex items-center justify-between">
+            <div>
+              <span class="font-bold text-white">${r.name} (${r.desc})</span>
+              <p class="text-emerald-300 text-[11px]">Free for ${Math.floor(m.freeMinutes / 60)}h ${m.freeMinutes % 60}m (Safe until <strong>${m.nextOccupiedAt}</strong>)</p>
+            </div>
+            <button onclick="openRoomModal('${r.id}')" class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold text-xs">Claim</button>
+          </li>
+        `;
+      });
+      html += `</ul>`;
+      return html;
+    }
+
+    function dismissAIResult() {
+      document.getElementById('aiResultBox').classList.add('hidden');
+    }
+
+    function openUnifiedHelpModal() {
+      const modal = document.getElementById('unifiedHelpModal');
+      modal.classList.remove('hidden');
+      setTimeout(() => modal.classList.remove('opacity-0'), 20);
+    }
+
+    function closeUnifiedHelpModal() {
+      const modal = document.getElementById('unifiedHelpModal');
+      modal.classList.add('opacity-0');
+      setTimeout(() => modal.classList.add('hidden'), 200);
+    }
+
+    function setToCurrentRealTime() {
+      const now = new Date();
+      let day = now.getDay();
+      if (day === 0 || day === 6) day = 1;
+      document.getElementById('locatorDaySelect').value = day;
+
+      const totalMinutes = now.getHours() * 60 + now.getMinutes();
+      let period = "1";
+      if (totalMinutes < 590) period = "1";
+      else if (totalMinutes < 640) period = "2";
+      else if (totalMinutes < 650) period = "TEA1";
+      else if (totalMinutes < 700) period = "3";
+      else if (totalMinutes < 750) period = "4";
+      else if (totalMinutes < 800) period = "LUNCH";
+      else if (totalMinutes < 850) period = "5";
+      else if (totalMinutes < 900) period = "6";
+      else if (totalMinutes < 910) period = "TEA2";
+      else if (totalMinutes < 960) period = "7";
+      else period = "8";
+
+      document.getElementById('locatorPeriodSelect').value = period;
+      refreshLocatorViews();
+    }
+
+    // Global Listeners
+    document.getElementById('sectionSelect').addEventListener('change', renderSubjects);
+    document.getElementById('semStartDate').addEventListener('change', calculateAll);
+    document.getElementById('todayDate').addEventListener('change', calculateAll);
+    document.getElementById('targetDate').addEventListener('change', calculateAll);
+
+    // Initial Load
+    window.addEventListener('DOMContentLoaded', () => {
+      renderSubjects();
+      renderLeaves();
+      setToCurrentRealTime();
+      applyPlaneTransform();
+    });
+  </script>
+</body>
+</html>
